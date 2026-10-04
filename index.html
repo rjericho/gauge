@@ -128,6 +128,20 @@ button{cursor:pointer;background:none;border:0;padding:0;text-align:left}
 .warn{border-left:2px solid var(--flag);padding-left:12px;color:var(--ink)}
 textarea{width:100%;min-height:130px;background:transparent;border:1.5px solid var(--hair);border-radius:12px;padding:12px 14px;font-size:16px;line-height:1.5;resize:vertical}
 textarea:focus{outline:none;border-color:var(--rule)}
+.step{display:flex;align-items:baseline;gap:12px}
+.stepn{font-family:var(--serif);font-size:44px;line-height:.8;color:var(--green)}
+.steph{font-family:var(--serif);font-weight:400;font-size:30px;line-height:1.05;letter-spacing:-.01em;margin:0}
+.cmp{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1fr);gap:10px 14px;align-items:end}
+.cmp .eyebrow.mine{color:var(--ink)}
+.cmp .rl{font-size:13px;font-weight:500;color:var(--mute);padding-bottom:8px;line-height:1.25}
+.cin input{width:100%;min-width:0;background:none;border:0;border-bottom:1.5px solid var(--rule);border-radius:0;padding:0 0 4px;font-family:var(--serif);font-size:30px;line-height:1.1;color:var(--ink);font-variant-numeric:tabular-nums}
+.cin input[type=text]{font-family:var(--sans);font-size:14px;font-weight:600;padding-bottom:8px;text-overflow:ellipsis}
+.cmp .cin:nth-child(3n) input{border-bottom-color:var(--green)}
+.cin input::placeholder{color:var(--hair)}
+.cin input:focus{outline:none;border-bottom-width:3px}
+.fitrow{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:14px;align-items:start}
+.fitrow .op{font-family:var(--serif);font-size:40px;color:var(--green);padding-top:6px}
+.found .tlink{margin-left:6px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding-block:24px;border-bottom:1px solid var(--hair)}
 .stat{display:grid;gap:4px;min-width:0}
 .stat .big{font-size:48px}
@@ -231,8 +245,10 @@ function pieceNames(model){const out=[];(model.lines||[]).forEach(l=>{if(!l.head
 function b64ToBuf(b){const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u.buffer}
 function bufToB64(buf){const u=new Uint8Array(buf);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)}
 
-function example(){return{id:'example',example:true,name:'Ridgeline Hat',file:'ridgeline-hat.pdf',unit:'in',pat:{s:20,r:28},mine:{s:18,r:24},mult:4,plus:0,keepEven:true,size:1,row:12,rep:0,repLen:0,line:17,view:'page',showOrig:false,notes:'',pasted:'',sizeLabel:'Adult S',found:{gauge:true,mult:true,yards:true},updated:0}}
-function migrate(p){if(!Array.isArray(p.counters)||!p.counters.length){p.counters=[{name:'Rows',row:p.row||0,rep:p.rep||0,repLen:p.repLen||0,line:p.line||0,anchor:null}];p.cur=0}
+function example(){return{id:'example',example:true,name:'Ridgeline Hat',file:'ridgeline-hat.pdf',unit:'in',pat:{s:20,r:28},mine:{s:18,r:24},mult:4,plus:0,keepEven:true,size:1,row:12,rep:0,repLen:0,line:17,view:'page',showOrig:false,notes:'',pasted:'',sizeLabel:'Adult S',found:{gauge:true,mult:true,yards:true,label:true},yarnPat:{yds:220,g:100,needle:'US 8 (5 mm)'},yarnMine:{yds:200,g:100,needle:'US 9 (5.5 mm)',s:18,r:24},updated:0}}
+function syncMine(p){const sw=p.swatch||{},ym=p.yarnMine||{};const src=sw.on&&ok(sw.s)&&ok(sw.r)?sw:ym;p.mine={s:src.s,r:src.r};return p}
+function migrate(p){if(!p.yarnPat)p.yarnPat={yds:'',g:'',needle:''};if(!p.yarnMine)p.yarnMine={yds:'',g:'',needle:'',s:(p.mine||{}).s||'',r:(p.mine||{}).r||''};
+  if(!p.swatch)p.swatch={on:false,s:'',r:''};if(!p.fit)p.fit={on:false,body:'',ease:'',dBody:0,dSleeve:0,patBust:''};syncMine(p);if(!Array.isArray(p.counters)||!p.counters.length){p.counters=[{name:'Rows',row:p.row||0,rep:p.rep||0,repLen:p.repLen||0,line:p.line||0,anchor:null}];p.cur=0}
   if(p.cur==null||!p.counters[p.cur])p.cur=0;const c=p.counters[p.cur];p.row=c.row;p.rep=c.rep;p.repLen=c.repLen;p.line=c.line;p.anchor=c.anchor||null;if(p.textSize==null)p.textSize=0;return p}
 function load(){try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(d&&Array.isArray(d.projects))S.projects=d.projects.map(migrate)}}catch(e){}
   if(!S.projects.some(p=>p.example)&&!S.projects.length)S.projects.push(migrate(example()))}
@@ -283,6 +299,7 @@ async function ensureModel(p){
   }
   if(!model.hasText){model.lines=[];if(p.pasted&&p.pasted.trim())model.lines=p.pasted.split(/\r?\n/).filter(l=>l.trim()).map(t=>({page:-1,y:0,h:0,text:t.replace(/\s+$/,''),items:[]}))}
   markHeads(model.lines);
+  {const bi=bustInfo(model.lines);p.found=p.found||{};const nb=bi?bi.vals:null;if(JSON.stringify(p.found.bust||null)!==JSON.stringify(nb)){p.found.bust=nb;p.found.bustName=bi?bi.name:'';p.found.lenUnit=bi?bi.unit:'in';save()}}
   if(p.total!==model.lines.length){p.total=model.lines.length;save()}
   S.models[p.id]=model;return model}
 
@@ -292,7 +309,19 @@ function detect(lines){
   const text=lines.map(l=>l.text).join('\n');const r={};
   let m=text.match(GAUGE_RE);if(m){r.s=+m[1];r.r=+m[2];r.unit=m[3]==='10'?'cm':'in'}
   m=text.match(/multiple of\s*(\d+)\s*(?:sts|stitches)?(?:\s*(?:plus|\+)\s*(\d+))?/i);if(m){r.mult=+m[1];r.plus=+(m[2]||0)}
+  m=text.match(/(\d+(?:\.\d+)?)\s*g\b[^\n]{0,24}?(\d+)\s*(?:yds?|yards)\b/i);if(m){r.g=+m[1];r.yds=+m[2]}
+  else{m=text.match(/(\d+)\s*(?:yds?|yards)\b[^\n]{0,30}?(\d+(?:\.\d+)?)\s*g\b/i);if(m){r.yds=+m[1];r.g=+m[2]}}
+  m=text.match(/US\s*(\d+(?:\.\d+)?)\s*\(\s*(\d+(?:\.\d+)?)\s*mm\s*\)/i);if(m)r.needle=`US ${m[1]} (${m[2]} mm)`;
+  m=text.match(/(\d+(?:\.\d+)?)\s*(?:"|”|″|in(?:ches)?|cm)?\s*(?:of\s+)?positive ease/i);if(m)r.ease=+m[1];
   return r}
+function bustInfo(lines){const l=lines.find(x=>/\b(?:bust|chest|circumference)\b/i.test(x.text)&&!/\bsts?\b/i.test(x.text));if(!l)return null;
+  const runs=l.text.match(new RegExp(GROUP.source,'g'))||[];let best=null;runs.forEach(r=>{const v=r.match(/\d+(?:\.\d+)?/g).map(Number);if(!best||v.length>best.length)best=v});
+  if(!best)return null;return{vals:best,name:/bust/i.test(l.text)?'bust':/chest/i.test(l.text)?'chest':'circumference',unit:/cm/i.test(l.text)&&!/(?:"|”|in\b|inch)/i.test(l.text)?'cm':'in'}}
+/* yards the pattern calls for in the chosen size, from a skein count or a yardage run */
+function patYards(model,p){const sz=p.size||0,yp=p.yarnPat||{};
+  for(const l of model.lines){const m=l.text.match(new RegExp('('+GROUP.source+')\\s*(?:skeins?|balls?|hanks?)\\b','i'));if(m&&ok(yp.yds)){const v=m[1].match(/\d+(?:\.\d+)?/g).map(Number);return{yds:pickI(v,sz)*yp.yds,from:'skeins'}}}
+  for(const l of model.lines){const re=new RegExp('('+GROUP.source+')\\s*(?:yds?|yards)\\b','gi');let m;while((m=re.exec(l.text))){const v=m[1].match(/\d+(?:\.\d+)?/g).map(Number);if(v.length>1||/yarn|total|approx/i.test(l.text))return{yds:pickI(v,sz),from:'yards'}}}
+  return null}
 function sizeLabels(lines,n){
   const i=lines.findIndex(l=>/^\s*(finished\s+)?sizes?\s*:?\s*$/i.test(l.text)||/^\s*sizes?\s*:/i.test(l.text));
   if(i>=0){const t=(/^\s*sizes?\s*:/i.test(lines[i].text)?lines[i].text.replace(/^\s*sizes?\s*:\s*/i,''):(lines[i+1]||{}).text)||'';
@@ -307,9 +336,17 @@ const GROUP=/\d+(?:\.\d+)?(?:(?:\s*[\)\]])?\s*(?:,\s*[\(\[]?|[\(\[])\s*\d+(?:\.\
 function ok(v){return +v>0}
 function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b]}return a}
 function ordSuffix(n){const t=n%100;if(t>=11&&t<=13)return'th';return['th','st','nd','rd'][n%10]||'th'}
+function fitInfo(p){const fit=p.fit||{},f=p.found||{},sz=p.size||0;
+  const B=f.bust&&f.bust.length?f.bust[Math.min(sz,f.bust.length-1)]:(+fit.patBust||0);
+  const F=(+fit.body||0)+(+fit.ease||0);
+  return{on:!!fit.on,B,F,fw:fit.on&&F>0&&B>0?F/B:1,dBody:fit.on?(+fit.dBody||0):0,dSleeve:fit.on?(+fit.dSleeve||0):0}}
 function params(p){const ps=+p.pat.s,pr=+p.pat.r,ms=ok(p.mine.s)?+p.mine.s:ps,mr=ok(p.mine.r)?+p.mine.r:pr;
-  const rs=ok(ps)&&ok(ms)?ms/ps:1,rr=ok(pr)&&ok(mr)?mr/pr:1;
-  return{rs,rr,yf:Math.sqrt(rs*rr),mult:Math.max(0,parseInt(p.mult)||0),plus:Math.max(0,parseInt(p.plus)||0),keepEven:!!p.keepEven}}
+  const gs=ok(ps)&&ok(ms)?ms/ps:1,rr=ok(pr)&&ok(mr)?mr/pr:1,fi=fitInfo(p);
+  const yp=p.yarnPat||{},ym=p.yarnMine||{};
+  return{rs:gs*fi.fw,gs,rr,fw:fi.fw,yf:Math.sqrt(gs*rr),dBody:fi.dBody,dSleeve:fi.dSleeve,dLen:0,
+    skr:ok(yp.yds)&&ok(ym.yds)?yp.yds/ym.yds:null,
+    mult:Math.max(0,parseInt(p.mult)||0),plus:Math.max(0,parseInt(p.plus)||0),keepEven:!!p.keepEven}}
+function amountChanges(P){return Math.abs(P.yf*P.fw-1)>1e-9||(P.skr&&Math.abs(P.skr-1)>1e-9)}
 /* What a number means, from the words around it. null = leave it alone. */
 function classify(before,after){
   if(/(?:cast\s+on|\bCO|pick\s+up(?:\s+and\s+knit)?|\bPU)\s*$/i.test(before))return'co';
@@ -324,8 +361,9 @@ function classify(before,after){
   if(/^\s*(?:skeins?|balls?|hanks?)\b/i.test(after))return'skein';
   return null}
 function convNum(n,kind,P){
-  if(kind==='yd')return P.yf===1?n:Math.ceil(n*P.yf*1.1/10)*10;
-  if(kind==='skein')return P.yf===1?n:Math.max(1,Math.ceil(n*P.yf*1.1-0.02));
+  if(kind==='len')return Math.max(.5,Math.round((n+(P.dLen||0))*4)/4);
+  if(kind==='yd')return !amountChanges(P)?n:Math.ceil(n*P.yf*P.fw*1.1/10)*10;
+  if(kind==='skein')return !amountChanges(P)?n:Math.max(1,Math.ceil(n*(P.skr||1)*P.yf*P.fw*1.1-0.02));
   if(kind==='row'){if(n<=2)return n;return Math.max(1,Math.round(n*P.rr))}
   if(n<=3)return n;const v=n*P.rs;
   if(kind==='co'&&P.mult>1){const k=Math.max(1,Math.round((v-P.plus)/P.mult));return k*P.mult+P.plus}
@@ -361,14 +399,16 @@ function parseLine(line,P){
   if(/\b(gauge|tension)\b/i.test(line)||GAUGE_RE.test(line)||/multiple of/i.test(line)){L.skip=true;return L}
   const re=new RegExp(GROUP.source,'g');let m;
   while((m=re.exec(line))){
-    let src=m[0];const off=m.index;if(src.includes('.'))continue;
+    let src=m[0];const off=m.index;
     let after=line.slice(off+src.length,off+src.length+40);const before=line.slice(Math.max(0,off-30),off);
+    const isLen=P.dLen&&/measures?\s*(?:about\s*|approx(?:imately|\.)?\s*)?$/i.test(before)&&/^\s*(?:in\b|inches|"|”|″|cm\b)/i.test(after)&&!/(armhole|neck|shoulder|yoke|rib|brim|cuff|hem|band|edging|collar|placket|garter)/i.test(line);
+    if(src.includes('.')&&!isLen)continue;
     let ord=false;const om=after.match(/^(st|nd|rd|th)\b/i);
     if(om&&!/[(\[]/.test(src)){ord=om[1];src+=om[1];after=after.slice(om[1].length);re.lastIndex=off+src.length}
-    let kind=ord?(/^\s+(?:rows?|rnds?|rounds?)\b/i.test(after)?'row':null):classify(before,after);
+    let kind=isLen?'len':ord?(/^\s+(?:rows?|rnds?|rounds?)\b/i.test(after)?'row':null):classify(before,after);
     if(!kind&&!ord&&/^\s*(?:more\s+)?times\b/i.test(after))kind='times';
     if(!kind)continue;
-    const o=src.match(/\d+/g).map(Number);
+    const o=src.match(/\d+(?:\.\d+)?/g).map(Number);
     L.raw.push({o,n:kind==='times'?o.slice():o.map(n=>convNum(n,kind,P)),k:kind,src,off,len:src.length,ord,
       total:kind==='st'&&(/^\s*(?:sts?|stitches)\s*(?:remain|rem\b|total|in\s+total|on\s+(?:the\s+)?needle|\)|[.;:]|$)/i.test(after)||/(?:have|total of|=|there are)\s*$/i.test(before)||/(?:sts?|stitch(?:es)?)\s+(?:count|total)\s*:?\s*$/i.test(before)),
       every:kind==='row'&&/every\s*$/i.test(before),more:kind==='times'&&/^\s*more\b/i.test(after)})}
@@ -438,13 +478,15 @@ function resolveResidual(L,r,prev,P){
 function finalize(L,P){
   if(L.skip)return{segs:[{t:L.line}],changed:0,flag:null};
   const segs=[];let last=0,changed=0;
-  L.raw.forEach(r=>{const diff=r.n.some((v,i)=>v!==r.o[i])||((r.k==='yd'||r.k==='skein')&&P.yf!==1);if(!diff)return;
+  L.raw.forEach(r=>{const diff=r.n.some((v,i)=>v!==r.o[i])||((r.k==='yd'||r.k==='skein')&&amountChanges(P));if(!diff)return;
     if(r.off>last)segs.push({t:L.line.slice(last,r.off)});segs.push(r);last=r.off+r.len;changed++});
   if(last<L.line.length)segs.push({t:L.line.slice(last)});
   return{segs,changed,flag:L.flag,after:L.after||null,shape:L.shape||null,head:L.headLike||false}}
 /* Walks the pattern top to bottom, carrying the live stitch count forward the way a knitter does. */
 function convertAll(model,p){
-  const P=params(p),sz=p.size||0,parsed=model.lines.map(l=>parseLine(l.text,P));
+  const P=params(p),sz=p.size||0;let sect='';
+  const parsed=model.lines.map(l=>{const t=l.text.trim();if(l.head||(t.length<40&&/^[A-Z][A-Z0-9 &'’:\-]+$/.test(t)&&/[A-Z]{3}/.test(t)))sect=t;
+    return parseLine(l.text,Object.assign({},P,{dLen:/sleeve|cuff|arm\b/i.test(sect)?P.dSleeve:P.dBody}))});
   let prev=null,pending=null;
   const expire=()=>{if(pending){pending.L.flag=pending.L.flag||{text:'This line’s numbers depend on a stitch count the app couldn’t find nearby. Check it by hand.'};pending=null}};
   parsed.forEach((L,i)=>{
@@ -540,36 +582,81 @@ function home(){
         <input id="pdfin" class="vh" type="file" accept="application/pdf,.pdf"></label></div>
   </div>`}
 
+function cin(path,val,ph,mode,lab){return`<label class="cin" for="g-${path.replace('.','-')}"><span class="vh">${lab}</span><input id="g-${path.replace('.','-')}" type="${mode==='text'?'text':'number'}" ${mode==='text'?'':'inputmode="decimal" step="0.5"'} data-g="${path}" value="${esc(val??'')}" placeholder="${ph}"></label>`}
+function yarnNeed(p,model){
+  const py=patYards(model,p),P=params(p);if(!py)return'Add the yardage from the pattern’s materials list and Gauge works out how much of your yarn to buy.';
+  const need=Math.ceil(py.yds*P.yf*P.fw*1.1/10)*10,ym=p.yarnMine||{};
+  const yds=need.toLocaleString();
+  if(ok(ym.yds)){const sk=Math.ceil(need/ym.yds-0.02);return`Buy <em>${sk} skein${sk===1?'':'s'}</em> of your yarn, about ${yds} yards${ok(ym.g)?` (${Math.round(sk*ym.g)} g)`:''}. That includes a 10% cushion.`}
+  return`You’ll need about <em>${yds} yards</em> of your yarn. Enter yards per skein from your label for a skein count.`}
+function fitLine(p,model){
+  const fi=fitInfo(p),f=p.found||{},u=f.lenUnit==='cm'?' cm':'"',nm=f.bustName||'bust';
+  if(!fi.on)return'';
+  if(!(fi.F>0))return`Enter her ${nm} measurement and the ease she likes.`;
+  if(!(fi.B>0))return`Enter the pattern’s finished ${nm} for this size, from its size list or schematic.`;
+  const pct=Math.round((fi.fw-1)*100);
+  let t=`Finished ${nm} <em>${fmtN(fi.F)}${u}</em>. `+(Math.abs(pct)<1?`That matches this size.`:`Gauge builds this size ${Math.abs(pct)}% ${pct>0?'wider':'narrower'}, from ${fmtN(fi.B)}${u}.`);
+  return t}
+function fmtN(x){return Math.round(x*10)/10}
+function closestSize(p){const fi=fitInfo(p),b=(p.found||{}).bust;if(!fi.on||!(fi.F>0)||!b||!b.length)return-1;let k=0;b.forEach((v,i)=>{if(Math.abs(v-fi.F)<Math.abs(b[k]-fi.F))k=i});return k}
+function gaugeSource(p){const sw=p.swatch||{};return sw.on&&ok(sw.s)&&ok(sw.r)?'Using your swatch.':'Using your yarn’s label. A swatch is more accurate.'}
+
 function setup(p,model){
   const conv=convertAll(model,p);
-  const nSizes=Math.max(1,...conv.flatMap(c=>c.segs.filter(s=>s.n).map(s=>s.n.length)));
+  const nSizes=Math.max(1,...conv.flatMap(c=>c.segs.filter(s=>s.n).map(s=>s.n.length)),((p.found||{}).bust||[]).length);
   const labels=sizeLabels(model.lines,nSizes);const st=stats(p,model);
   p.sizeLabel=nSizes>1?labels[Math.min(p.size||0,nSizes-1)]:'';
   const scanned=!model.hasText&&!model.missing&&!model.noLib;
+  const yp=p.yarnPat,ym=p.yarnMine,sw=p.swatch,fit=p.fit,f=p.found||{},u4=unitLabel(p),lu=f.lenUnit==='cm'?'cm':'in',nm=f.bustName||'bust';
+  const cs=closestSize(p);
   return`<nav class="nav"><button class="tlink" data-act="home">← Projects</button>${model.lines.length||model.pages.length?'<button class="tlink" data-act="knit">Knit →</button>':''}</nav>
   <label class="vh" for="f-name">Pattern name</label>
   <input id="f-name" class="title-in" type="text" data-f="name" value="${esc(p.name)}" placeholder="Pattern name">
   <p class="eyebrow src">${esc(p.file||'')}${model.pages.length?` · ${model.pages.length} page${model.pages.length>1?'s':''}`:''}</p>
   ${model.missing?'<section class="blk"><p class="small warn">The PDF for this project is no longer saved on this phone. Restore a backup or add the pattern again.</p></section>':''}
   ${model.noLib?'<section class="blk"><p class="small warn">The PDF reader needs a connection the first time it opens. Connect once and reopen this project.</p></section>':''}
+
   <section class="blk">
-    <div class="blkhead"><h2 class="eyebrow">Gauge</h2>
-      <div class="seg" role="group" aria-label="Measured over"><button data-act="unit" data-u="in" aria-pressed="${p.unit!=='cm'}">4 in</button><button data-act="unit" data-u="cm" aria-pressed="${p.unit==='cm'}">10 cm</button></div></div>
-    <div class="gg">
-      <div class="gcol"><span class="eyebrow">Pattern</span>
-        <label class="nf" for="g-ps"><input id="g-ps" type="number" inputmode="decimal" min="1" step="0.5" data-g="pat.s" value="${esc(p.pat.s)}" placeholder="20"><span>Stitches</span></label>
-        <label class="nf" for="g-pr"><input id="g-pr" type="number" inputmode="decimal" min="1" step="0.5" data-g="pat.r" value="${esc(p.pat.r)}" placeholder="28"><span>Rows</span></label></div>
-      <div class="garrow" aria-hidden="true">${ARROW}</div>
-      <div class="gcol mine"><span class="eyebrow">Your swatch</span>
-        <label class="nf" for="g-ms"><input id="g-ms" type="number" inputmode="decimal" min="1" step="0.5" data-g="mine.s" value="${esc(p.mine.s)}" placeholder="?"><span>Stitches</span></label>
-        <label class="nf" for="g-mr"><input id="g-mr" type="number" inputmode="decimal" min="1" step="0.5" data-g="mine.r" value="${esc(p.mine.r)}" placeholder="?"><span>Rows</span></label></div>
+    <div class="step"><span class="stepn">1</span><h2 class="steph">Swap the yarn</h2></div>
+    <p class="small">Copy each label. The pattern’s yarn is in its materials list.${f.label||f.gauge?' Gauge filled in what it found in the PDF, so check it against the page.':''}</p>
+    <div class="cmp" role="group" aria-label="Yarn labels">
+      <span></span><span class="eyebrow">Pattern’s yarn</span><span class="eyebrow mine">Your yarn</span>
+      <span class="rl">Stitches per ${u4}</span>${cin('pat.s',p.pat.s,'20','n','Pattern stitches')}${cin('yarnMine.s',ym.s,'?','n','Your yarn stitches')}
+      <span class="rl">Rows per ${u4}</span>${cin('pat.r',p.pat.r,'28','n','Pattern rows')}${cin('yarnMine.r',ym.r,'?','n','Your yarn rows')}
+      <span class="rl">Yards per skein</span>${cin('yarnPat.yds',yp.yds,'220','n','Pattern yards per skein')}${cin('yarnMine.yds',ym.yds,'?','n','Your yards per skein')}
+      <span class="rl">Grams per skein</span>${cin('yarnPat.g',yp.g,'100','n','Pattern grams per skein')}${cin('yarnMine.g',ym.g,'?','n','Your grams per skein')}
+      <span class="rl">Needle</span>${cin('yarnPat.needle',yp.needle,'US 7','text','Pattern needle')}${cin('yarnMine.needle',ym.needle,'US 8','text','Your needle')}
     </div>
-    ${p.found&&p.found.gauge?'<p class="found">Pattern gauge read from the PDF. Check it against the page.</p>':''}
+    <div class="blkhead"><label class="tog" for="g-swatch-on"><input id="g-swatch-on" type="checkbox" data-g="swatch.on" ${sw.on?'checked':''}>I knit a swatch</label>
+      <div class="seg" role="group" aria-label="Measured over"><button data-act="unit" data-u="in" aria-pressed="${p.unit!=='cm'}">4 in</button><button data-act="unit" data-u="cm" aria-pressed="${p.unit==='cm'}">10 cm</button></div></div>
+    ${sw.on?`<p class="small">Her hands may knit tighter or looser than the label. Block the swatch, measure over ${u4}, and these numbers replace the label’s.</p>
+    <div class="two">
+      <label class="nf" for="g-swatch-s"><input id="g-swatch-s" type="number" inputmode="decimal" step="0.5" data-g="swatch.s" value="${esc(sw.s)}" placeholder="?"><span>Stitches</span></label>
+      <label class="nf" for="g-swatch-r"><input id="g-swatch-r" type="number" inputmode="decimal" step="0.5" data-g="swatch.r" value="${esc(sw.r)}" placeholder="?"><span>Rows</span></label></div>`:''}
+    <p class="found" id="gsrc">${gaugeSource(p)}</p>
     <p class="sentence" id="readout">${readout(p)}</p>
+    <p class="sentence" id="yarnneed">${yarnNeed(p,model)}</p>
   </section>
-  ${nSizes>1?`<section class="blk"><h2 class="eyebrow">Size</h2><div class="chips" role="group" aria-label="Size">${labels.map((l,i)=>`<button data-act="size" data-s="${i}" aria-pressed="${(p.size||0)===i}">${esc(l)}</button>`).join('')}</div></section>`:''}
+
+  <section class="blk">
+    <div class="step"><span class="stepn">2</span><h2 class="steph">Choose the size</h2></div>
+    ${nSizes>1?`<div class="chips" role="group" aria-label="Size">${labels.map((l,i)=>`<button data-act="size" data-s="${i}" aria-pressed="${(p.size||0)===i}">${esc(l)}</button>`).join('')}</div>`:''}
+    <label class="tog" for="g-fit-on"><input id="g-fit-on" type="checkbox" data-g="fit.on" ${fit.on?'checked':''}>Dial in her measurements</label>
+    ${fit.on?`<div class="fitrow">
+        <label class="nf" for="g-fit-body"><input id="g-fit-body" type="number" inputmode="decimal" step="0.5" data-g="fit.body" value="${esc(fit.body)}" placeholder="?"><span>Her ${nm} (${lu})</span></label>
+        <span class="op" aria-hidden="true">+</span>
+        <label class="nf" for="g-fit-ease"><input id="g-fit-ease" type="number" inputmode="decimal" step="0.5" data-g="fit.ease" value="${esc(fit.ease)}" placeholder="0"><span>Ease${f.ease!=null?` · pattern says ${f.ease}`:''}</span></label></div>
+      ${f.bust&&f.bust.length?'':`<label class="nf" for="g-fit-patBust"><input id="g-fit-patBust" type="number" inputmode="decimal" step="0.5" data-g="fit.patBust" value="${esc(fit.patBust)}" placeholder="?"><span>Pattern’s finished ${nm}, this size (${lu})</span></label>`}
+      <p class="sentence" id="fitline">${fitLine(p,model)}</p>
+      <p class="found" id="fitclose">${cs>=0&&cs!==(p.size||0)?`Closest pattern size: ${esc(labels[cs]||'')}. <button class="tlink" data-act="size" data-s="${cs}">Build from it</button>`:''}</p>
+      <div class="two">
+        <label class="nf" for="g-fit-dBody"><input id="g-fit-dBody" type="number" inputmode="decimal" step="0.5" data-g="fit.dBody" value="${esc(fit.dBody||'')}" placeholder="0"><span>Body length ± ${lu}</span></label>
+        <label class="nf" for="g-fit-dSleeve"><input id="g-fit-dSleeve" type="number" inputmode="decimal" step="0.5" data-g="fit.dSleeve" value="${esc(fit.dSleeve||'')}" placeholder="0"><span>Sleeve length ± ${lu}</span></label></div>
+      <p class="small">Extra length goes where the pattern says to work until the piece measures a length. Ribbing, armholes and necklines stay as written.</p>`:''}
+  </section>
+
   <section class="blk"><h2 class="eyebrow">Stitch repeat</h2>
-    <p class="small">Cast-on counts round to fit the stitch pattern. A k2, p2 rib is a multiple of 4. “Multiple of 8 plus 2” is 8 and 2.${p.found&&p.found.mult?' Read from the PDF.':''}</p>
+    <p class="small">Cast-on counts round to fit the stitch pattern. A k2, p2 rib is a multiple of 4. “Multiple of 8 plus 2” is 8 and 2.${f.mult?' Read from the PDF.':''}</p>
     <div class="two">
       <label class="nf" for="f-mult"><input id="f-mult" type="number" inputmode="numeric" min="0" data-f="mult" value="${p.mult||''}" placeholder="–"><span>Multiple of</span></label>
       <label class="nf" for="f-plus"><input id="f-plus" type="number" inputmode="numeric" min="0" data-f="plus" value="${p.plus||''}" placeholder="0"><span>Plus</span></label></div>
@@ -590,6 +677,10 @@ function setup(p,model){
   <div class="sfoot">
     ${p.example?'<span class="eyebrow">Example pattern</span>':`<button class="tlink danger" data-act="del">${S.confirmDel?'Tap again to delete':'Delete project'}</button>`}
     <span class="eyebrow">Saved as you type</span></div>`}
+function refreshSetup(p){const m=S.models[p.id];if(!m)return;const set=(id,h)=>{const e=$(id);if(e)e.innerHTML=h};
+  set('readout',readout(p));set('gsrc',gaugeSource(p));set('yarnneed',yarnNeed(p,m));set('fitline',fitLine(p,m));
+  const cs=closestSize(p),e=$('fitclose');if(e){const labels=sizeLabels(m.lines,Math.max(1,((p.found||{}).bust||[]).length));e.innerHTML=cs>=0&&cs!==(p.size||0)?`Closest pattern size: ${esc(labels[cs]||'')}. <button class="tlink" data-act="size" data-s="${cs}">Build from it</button>`:''}
+  const st=stats(p,m);$('st-n').textContent=st.n;const sf=$('st-f');sf.textContent=st.f;sf.style.color=st.f?'var(--flag)':''}
 
 function knitFrame(p,model){
   const canPage=model.pages.length>0;const view=canPage?(p.view||'page'):'text';
@@ -671,7 +762,7 @@ async function render(scroll){
   if(S.view==='home'||!p){S.view='home';app.innerHTML=home();window.scrollTo(0,0);return}
   if(!S.models[p.id])app.innerHTML='<div class="loading"><span class="eyebrow">Reading pattern</span><span class="n">…</span></div>';
   const model=await ensureModel(p);
-  if(S.view==='setup'){app.innerHTML=setup(p,model);window.scrollTo(0,0);return}
+  if(S.view==='setup'){app.innerHTML=setup(p,model);window.scrollTo(0,S.keepScroll||0);S.keepScroll=0;return}
   app.innerHTML=knitFrame(p,model);const host=$('kbody');
   const view=model.pages.length?(p.view||'page'):'text';
   if(view==='page')await pageView(p,model,host);else host.innerHTML=textView(p,model);
@@ -708,6 +799,9 @@ async function addPdf(file){
   const d=detect(model.lines);
   if(d.s){p.pat={s:d.s,r:d.r};p.unit=d.unit;p.found.gauge=true}
   if(d.mult){p.mult=d.mult;p.plus=d.plus;p.found.mult=true}
+  if(d.yds){p.yarnPat.yds=d.yds;p.yarnPat.g=d.g||'';p.found.label=true}
+  if(d.needle)p.yarnPat.needle=d.needle;
+  if(d.ease!=null){p.fit.ease=d.ease;p.found.ease=d.ease}
   touch(p);render()}
 async function backup(){
   const pdfs={};for(const p of S.projects){if(p.example)continue;const b=await getPdf(p.id);if(b)pdfs[p.id]=bufToB64(b)}
@@ -741,8 +835,8 @@ document.addEventListener('click',async e=>{
     case'home':S.view='home';S.panel=null;render();break;
     case'setup':S.view='setup';S.panel=null;render();break;
     case'knit':S.view='knit';touch(p);render(true);break;
-    case'unit':p.unit=b.dataset.u;touch(p);document.querySelectorAll('[data-act=unit]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.u===p.unit));$('readout').innerHTML=readout(p);break;
-    case'size':p.size=+b.dataset.s;touch(p);render();break;
+    case'unit':p.unit=b.dataset.u;touch(p);document.querySelectorAll('[data-act=unit]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.u===p.unit));refreshSetup(p);document.querySelectorAll('.cmp .rl').forEach(e=>{e.textContent=e.textContent.replace(/per (4 in|10 cm)/,'per '+unitLabel(p))});break;
+    case'size':p.size=+b.dataset.s;touch(p);S.keepScroll=window.scrollY;render();break;
     case'view':p.view=b.dataset.v;touch(p);render(true);break;
     case'orig':p.showOrig=b.checked;touch(p);{const pg=$('pages');if(pg)pg.classList.toggle('orig',p.showOrig);else $('kbody').innerHTML=textView(p,S.models[p.id])}break;
     case'wake':S.wantWake=b.checked;await setWake(b.checked);break;
@@ -772,7 +866,10 @@ document.addEventListener('change',e=>{
   if(e.target.id==='restorein'&&e.target.files[0])restore(e.target.files[0])});
 document.addEventListener('input',e=>{
   const el=e.target,p=cur();if(!p||S.view!=='setup')return;
-  if(el.dataset.g){const[k,f]=el.dataset.g.split('.');p[k][f]=el.value===''?'':+el.value}
+  if(el.dataset.g){const [k,f]=el.dataset.g.split('.');p[k]=p[k]||{};
+    p[k][f]=el.type==='checkbox'?el.checked:el.type==='number'?(el.value===''?'':+el.value):el.value;syncMine(p);touch(p);
+    if(el.type==='checkbox'){S.keepScroll=window.scrollY;render();return}
+    refreshSetup(p);return}
   else if(el.dataset.f){const f=el.dataset.f;p[f]=el.type==='checkbox'?el.checked:el.type==='number'?(el.value===''?0:+el.value):el.value;
     if(f==='pasted'){delete S.models[p.id];delete S.pageCache[p.id]}}
   else return;
