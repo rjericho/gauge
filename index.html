@@ -180,6 +180,7 @@ textarea:focus{outline:none;border-color:var(--rule)}
 .mk s{color:var(--on-green);opacity:.6;font-weight:400;margin-left:5px;font-size:.85em}
 .ln.done .mk{opacity:.55}
 .fnote{display:block;font-size:13px;color:var(--flag);margin-top:4px;line-height:1.4}
+.fnote.note{color:var(--ink);border-left:2px solid var(--green);padding-left:8px}
 .dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--paper);box-shadow:0 -1px 0 var(--hair);padding:6px 20px calc(8px + env(safe-area-inset-bottom,0px))}
 .dockin{max-width:600px;margin:0 auto}
 .dsub{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -262,17 +263,54 @@ async function delPdf(id){delete S.mem[id];try{const db=await idb();db.transacti
 async function pdfBuf(p){return p.example?b64ToBuf(EX_B64):await getPdf(p.id)}
 
 /* ---------- reading the PDF into lines ---------- */
+/* Split a page into columns when there is a clear vertical gutter between two blocks of text. */
+function columnsOf(pg){
+  const its=pg.items,W=pg.w;if(its.length<12)return[its];
+  const body=its.filter(t=>t.w<W*0.55);let best=null;
+  const allow=Math.max(4,Math.round(its.length*0.06));
+  for(let g=W*0.3;g<=W*0.7;g+=2){
+    if(body.filter(t=>t.x<g&&t.x+t.w>g).length>allow)continue;
+    const L=body.filter(t=>t.x+t.w<=g).length,R=body.filter(t=>t.x>=g).length;
+    if(L>=5&&R>=5){const sc=Math.min(L,R);if(!best||sc>best.sc)best={g,sc}}}
+  if(!best)return[its];
+  // the gutter must be crossed by almost nothing that sits between the columns vertically
+  const left=[],right=[];its.forEach(t=>{(t.x+t.w/2<best.g?left:right).push(t)});
+  return[left,right]}
 function buildLines(pages){
   const out=[];
   pages.forEach((pg,pi)=>{
-    const its=pg.items.slice().sort((a,b)=>(a.y-b.y)||(a.x-b.x));const lines=[];
+    columnsOf(pg).forEach((col,ci)=>{
+    const its=col.slice().sort((a,b)=>(a.y-b.y)||(a.x-b.x));const lines=[];
     for(const it of its){let L=lines.find(l=>Math.abs(l.y-it.y)<Math.max(2,Math.min(l.h,it.h)*0.45));
       if(!L){L={y:it.y,h:it.h,items:[]};lines.push(L)}L.items.push(it);L.h=Math.max(L.h,it.h)}
     lines.sort((a,b)=>a.y-b.y);
-    for(const L of lines){L.items.sort((a,b)=>a.x-b.x);let text='',prevEnd=null;
-      for(const it of L.items){if(text&&prevEnd!==null&&it.x-prevEnd>it.h*0.12&&!/\s$/.test(text)&&!/^\s/.test(it.str))text+=' ';
-        it.start=text.length;text+=it.str;prevEnd=it.x+it.w}
-      if(text.trim())out.push({page:pi,y:L.y,h:L.h,text:text.replace(/\s+$/,''),items:L.items})}});
+    for(const L of lines){L.items.sort((a,b)=>a.x-b.x);let text='',prevEnd=null;const items=[];
+      for(const it0 of L.items){const it=Object.assign({},it0);if(text&&prevEnd!==null&&it.x-prevEnd>it.h*0.12&&!/\s$/.test(text)&&!/^\s/.test(it.str))text+=' ';
+        it.start=text.length;text+=it.str;prevEnd=it.x+it.w;items.push(it)}
+      const x0=Math.min(...items.map(t=>t.x)),x1=Math.max(...items.map(t=>t.x+t.w));
+      if(text.trim())out.push({page:pi,col:ci,y:L.y,h:L.h,x0,x1,text:text.replace(/\s+$/,''),items})}})});
+  return out}
+/* Join printed lines that wrap one instruction, so sizes and counts stay together. */
+function joinLines(lines){
+  const out=[];const colW={};
+  lines.forEach(l=>{const k=l.page+':'+l.col;colW[k]=Math.max(colW[k]||0,l.x1-l.x0)});
+  const startsNew=t=>/^\s*(?:[•●▪◦]|(?:set-?up\s+)?(?:rows?|rnds?|rounds?|step)\s*\d|[A-Z][A-Za-z #\/-]{0,30}:\s)/i.test(t);
+  for(const l of lines){
+    const prev=out[out.length-1];
+    let join=false;
+    if(prev&&prev.page===l.page&&prev.col===l.col&&!prev.head&&!l.head&&!startsNew(l.text)){
+      const gap=l.y-prev.lastY,lastW=prev.lastW,full=colW[l.page+':'+l.col]||lastW;
+      const ended=/[.!?:]["”’)]*\s*$/.test(prev.text)&&(!/\b(?:sts?|approx|incl|rnd|rep|patt?|beg|foll|cont)\.\s*$/i.test(prev.text)||/^[A-Z]/.test(l.text));
+      const open=/(?:[,(\[]|--|\band|\bor)\s*$/i.test(prev.text);
+      join=gap>0&&gap<prev.lastH*1.9&&(open||(lastW>full*0.72&&!ended))}
+    if(join){
+      const hy=/[A-Za-z]\s*-$/.test(prev.text)&&/^[a-z]/.test(l.text);
+      if(hy)prev.text=prev.text.replace(/\s*-$/,'');
+      const sep=hy?'':' ',base=prev.text.length+sep.length;
+      prev.text+=sep+l.text;
+      l.items.forEach(it=>{const c=Object.assign({},it);c.start+=base;prev.items.push(c)});
+      prev.lastY=l.y;prev.lastH=l.h;prev.lastW=l.x1-l.x0;prev.bot=Math.max(prev.bot,l.y+l.h*0.3);prev.h=Math.max(prev.h,l.h)}
+    else out.push(Object.assign({},l,{items:l.items.map(it=>Object.assign({},it)),lastY:l.y,lastH:l.h,lastW:l.x1-l.x0,top:l.y-l.h*0.9,bot:l.y+l.h*0.3}))}
   return out}
 function markHeads(lines){
   const hs=lines.map(l=>l.h).filter(Boolean).sort((a,b)=>a-b);const med=hs.length?hs[Math.floor(hs.length/2)]:0;
@@ -294,11 +332,12 @@ async function ensureModel(p){
         const ops=await pg.getOperatorList().catch(()=>null);const hasArt=!!(ops&&ops.fnArray.some(f=>f===pdfjsLib.OPS.paintImageXObject||f===pdfjsLib.OPS.paintJpegXObject||f===pdfjsLib.OPS.paintImageMaskXObject));
         if(!items.length||x1-x0<vp.width*0.3||hasArt){x0=0;x1=vp.width;y0=0;y1=vp.height}else{x0=Math.max(0,x0-18);x1=Math.min(vp.width,x1+18);y0=Math.max(0,y0-18);y1=Math.min(vp.height,y1+18)}
         model.pages.push({w:vp.width,h:vp.height,items,x0,x1,y0,y1})}
-      model.lines=buildLines(model.pages);model.hasText=model.lines.length>3;
+      model.lines=buildLines(model.pages);markHeads(model.lines);model.lines=joinLines(model.lines);model.hasText=model.lines.length>3;
     }catch(e){model.broken=true}
   }
   if(!model.hasText){model.lines=[];if(p.pasted&&p.pasted.trim())model.lines=p.pasted.split(/\r?\n/).filter(l=>l.trim()).map(t=>({page:-1,y:0,h:0,text:t.replace(/\s+$/,''),items:[]}))}
   markHeads(model.lines);
+  if(p.example&&!p.lineSet){const k=model.lines.findIndex(l=>/Repeat Rnd 1/.test(l.text));if(k>=0){p.line=k;if(p.counters&&p.counters[0])p.counters[0].line=k}p.lineSet=true}
   {const bi=bustInfo(model.lines);p.found=p.found||{};const nb=bi?bi.vals:null;if(JSON.stringify(p.found.bust||null)!==JSON.stringify(nb)){p.found.bust=nb;p.found.bustName=bi?bi.name:'';p.found.lenUnit=bi?bi.unit:'in';save()}}
   if(p.total!==model.lines.length){p.total=model.lines.length;save()}
   S.models[p.id]=model;return model}
@@ -308,6 +347,7 @@ const GAUGE_RE=/(\d+(?:\.\d+)?)\s*(?:sts|stitches)\s*(?:and|&|,|x|×|by)?\s*(\d+
 function detect(lines){
   const text=lines.map(l=>l.text).join('\n');const r={};
   let m=text.match(GAUGE_RE);if(m){r.s=+m[1];r.r=+m[2];r.unit=m[3]==='10'?'cm':'in'}
+  else if((m=text.match(GAUGE_IN))){r.s=+m[1]*4;r.unit='in';r.perInch=true;const mr=text.match(/(\d+(?:\.\d+)?)\s*(?:rows?|rnds?)\s*(?:=|to|per)\s*1\s*(?:"|”|″|in)/i);if(mr)r.r=+mr[1]*4}
   m=text.match(/multiple of\s*(\d+)\s*(?:sts|stitches)?(?:\s*(?:plus|\+)\s*(\d+))?/i);if(m){r.mult=+m[1];r.plus=+(m[2]||0)}
   m=text.match(/(\d+(?:\.\d+)?)\s*g\b[^\n]{0,24}?(\d+)\s*(?:yds?|yards)\b/i);if(m){r.g=+m[1];r.yds=+m[2]}
   else{m=text.match(/(\d+)\s*(?:yds?|yards)\b[^\n]{0,30}?(\d+(?:\.\d+)?)\s*g\b/i);if(m){r.yds=+m[1];r.g=+m[2]}}
@@ -349,12 +389,16 @@ function params(p){const ps=+p.pat.s,pr=+p.pat.r,ms=ok(p.mine.s)?+p.mine.s:ps,mr
 function amountChanges(P){return Math.abs(P.yf*P.fw-1)>1e-9||(P.skr&&Math.abs(P.skr-1)>1e-9)}
 /* What a number means, from the words around it. null = leave it alone. */
 function classify(before,after){
-  if(/(?:cast\s+on|\bCO|pick\s+up(?:\s+and\s+knit)?|\bPU)\s*$/i.test(before))return'co';
+  if(/^\s*(?:sts?|stitches)\s+(?:in\s+)?(?:pat(?:t|tern)?|panel)\b/i.test(after))return null;
+  if(/pat(?:t|tern)?\s*#?\s*\d+\b[^,.;]{0,24}?(?:\bon\s+)?$/i.test(before)&&/^\s*(?:sts?|stitches)\b/i.test(after))return null;
+  if(/(?:^|[^-])--\s*$/.test(before)&&!/^\s*(?:rows?|rnds?|rounds?)\b/i.test(after))return'st';
+  if(/(?:cast\s+on|\bCO|pick[\s-]+up(?:\s+and\s+knit)?|\bPU)\s*(?:approx(?:imately|\.)?\s*)?$/i.test(before))return'co';
   if(/(?:sts?|stitch(?:es)?)\s+(?:count|total)\s*:?\s*$/i.test(before))return'st';
-  if(/^\s*(?:sts?|stitches)\b/i.test(after)){
+  if(/^\s*(?:more\s+)?(?:sts?|stitches)\b/i.test(after)){
     if(/(?:\blast|\bfirst|\b(?:over|across)\s+(?:the\s+)?(?:next|center|centre|middle)?)\s*$/i.test(before))return null;
     return'st'}
   if(/^\s*(?:rows?|rnds?|rounds?)\b/i.test(after)){
+    if(/\b(?:last|these|first|next|following|of|the)\s*$/i.test(before))return null;
     if(/^\s*(?:rows?|rnds?|rounds?)\s+(?:of|from)\s+(?:the\s+)?(?:chart|patt|pattern|rep|repeat|stripe|sequence|lace|cable|motif)/i.test(after))return null;
     return'row'}
   if(/^\s*(?:yds?|yards)\b/i.test(after))return/\/\s*$|\b(?:per|each)\s*$|\d\s*(?:g|oz)\b/i.test(before)||/\/\s*\d+\s*(?:yds?|yards)/i.test(after)?null:'yd';
@@ -365,7 +409,7 @@ function convNum(n,kind,P){
   if(kind==='yd')return !amountChanges(P)?n:Math.ceil(n*P.yf*P.fw*1.1/10)*10;
   if(kind==='skein')return !amountChanges(P)?n:Math.max(1,Math.ceil(n*(P.skr||1)*P.yf*P.fw*1.1-0.02));
   if(kind==='row'){if(n<=2)return n;return Math.max(1,Math.round(n*P.rr))}
-  if(n<=3)return n;const v=n*P.rs;
+  if(n<=3)return n;const v=P.panelF&&n>P.panelF?P.panelF+(n-P.panelF)*P.rs:n*P.rs;
   if(kind==='co'&&P.mult>1){const k=Math.max(1,Math.round((v-P.plus)/P.mult));return k*P.mult+P.plus}
   if(P.keepEven&&n%2===0)return Math.max(2,Math.round(v/2)*2);
   return Math.max(1,Math.round(v))}
@@ -394,24 +438,27 @@ function inferPer(line){let m;
   m=line.match(/\b(\d+)\s+sts?\s+(dec|inc)\w*/i);if(m)return(m[2][0].toLowerCase()==='d'?1:-1)*+m[1];
   if(!/rep(?:eat)?\s+from/i.test(line)){const d=(line.match(/\b(?:k2tog|p2tog|ssk|ssp|skp|skpo)\b/gi)||[]).length+2*(line.match(/\b(?:k3tog|sk2p|s2kp|cdd|sssk)\b/gi)||[]).length,i=(line.match(/\b(?:m1[lrp]?|yo|kfb|pfb)\b/gi)||[]).length;if(d||i)return d-i}
   return null}
+const GAUGE_IN=/(\d+(?:\.\d+)?)\s*(?:sts?|stitches)\s*(?:=|to|per)\s*1\s*(?:"|”|″|in)/i;
 function parseLine(line,P){
-  const L={line,raw:[],skip:false,flag:null,times:[],every:[]};
-  if(/\b(gauge|tension)\b/i.test(line)||GAUGE_RE.test(line)||/multiple of/i.test(line)){L.skip=true;return L}
+  const L={line,raw:[],skip:false,flag:null,times:[],every:[],P};
+  if(/\b(gauge|tension)\b/i.test(line)||GAUGE_RE.test(line)||GAUGE_IN.test(line)||/multiple of/i.test(line)){L.skip=true;return L}
   const re=new RegExp(GROUP.source,'g');let m;
   while((m=re.exec(line))){
     let src=m[0];const off=m.index;
     let after=line.slice(off+src.length,off+src.length+40);const before=line.slice(Math.max(0,off-30),off);
     const isLen=P.dLen&&/measures?\s*(?:about\s*|approx(?:imately|\.)?\s*)?$/i.test(before)&&/^\s*(?:in\b|inches|"|”|″|cm\b)/i.test(after)&&!/(armhole|neck|shoulder|yoke|rib|brim|cuff|hem|band|edging|collar|placket|garter)/i.test(line);
     if(src.includes('.')&&!isLen)continue;
+    if(P.panelF&&/\bcent(?:er|re)\s*$/i.test(before))continue;
+    if(P.panelSetup&&!isLen&&+src.match(/\d+/)[0]<=P.panelF)continue;
     let ord=false;const om=after.match(/^(st|nd|rd|th)\b/i);
     if(om&&!/[(\[]/.test(src)){ord=om[1];src+=om[1];after=after.slice(om[1].length);re.lastIndex=off+src.length}
-    let kind=isLen?'len':ord?(/^\s+(?:rows?|rnds?|rounds?)\b/i.test(after)?'row':null):classify(before,after);
-    if(!kind&&!ord&&/^\s*(?:more\s+)?times\b/i.test(after))kind='times';
+    let kind=isLen?'len':ord?(/^\s+(?:rows?|rnds?|rounds?)\b/i.test(after)&&(/\btimes\b|\buntil\b|\bto\s+\d+\s*(?:sts|stitches)|--|\bremain/i.test(line)||/^\s*(?:then\s+)?(?:dec|inc)(?:rease)?\s+(?:\d|every|one)/i.test(line))?'row':null):classify(before,after);
+    if(!kind&&!ord&&/^\s*,?\s*(?:[(\[][^)\]\d]*[)\]]\s*)*(?:more\s+)?times\b/i.test(after))kind='times';
     if(!kind)continue;
     const o=src.match(/\d+(?:\.\d+)?/g).map(Number);
     L.raw.push({o,n:kind==='times'?o.slice():o.map(n=>convNum(n,kind,P)),k:kind,src,off,len:src.length,ord,
-      total:kind==='st'&&(/^\s*(?:sts?|stitches)\s*(?:remain|rem\b|total|in\s+total|on\s+(?:the\s+)?needle|\)|[.;:]|$)/i.test(after)||/(?:have|total of|=|there are)\s*$/i.test(before)||/(?:sts?|stitch(?:es)?)\s+(?:count|total)\s*:?\s*$/i.test(before)),
-      every:kind==='row'&&/every\s*$/i.test(before),more:kind==='times'&&/^\s*more\b/i.test(after)})}
+      total:kind==='st'&&(/--\s*$/.test(before)||/\b(?:inc(?:rease|reasing)?|dec(?:rease|reasing)?)\b[^.;]{0,40}\bto\s*$|\b(?:inc|dec)\s+to\s*$/i.test(before)||/^\s*(?:sts?|stitches)\s*(?:remain|rem\b|total|in\s+total|on\s+(?:the\s+)?needle|\)|[.;:]|$)/i.test(after)||/(?:have|total of|=|there are)\s*$/i.test(before)||/(?:sts?|stitch(?:es)?)\s+(?:count|total)\s*:?\s*$/i.test(before)),
+      every:kind==='row'&&/every\s*$/i.test(before),more:kind==='times'&&/^\s*,?\s*(?:[(\[][^)\]\d]*[)\]]\s*)*more\b/i.test(after)})}
   L.co=L.raw.find(r=>r.k==='co');L.res=L.raw.find(r=>r.k==='st'&&r.total);L.every=L.raw.filter(r=>r.every);
   const star=line.match(/\*\s*(.+?)\s*[;,]?\s*rep(?:eat)?\s+from\s*\*/i);
   const par=line.match(/[\(\[]\s*([^()\[\]*]+?)\s*[\)\]]\s*(\d+)\s*(?:more\s+)?times/i);
@@ -470,11 +517,13 @@ function resolveShaping(L,r,prev,P,sz){
     if(me){if(!every){const rw=L.raw.find(x=>x.k==='row'&&!x.every);if(rw)every=pickI(rw.n,jFor(rw.n,n,i,sz))}
       L.shape={every,times:nr,dec:per>0,per:Math.abs(per)}}
     return Math.max(1,pn-per*nr)})}
-function resolveResidual(L,r,prev,P){
+function resolveResidual(L,r,prev,P,acc){
   const g=L.raw.filter(x=>x.k==='st'&&!x.total);
   r.n=r.o.map((ro,i)=>{const po=pickI(prev.o,i),pn=pickI(prev.n,i),d=po-ro;if(d===0)return pn;
+    if(acc&&acc.o.length){const ao=pickI(acc.o,i),an=pickI(acc.n,i);for(const m of [1,2])if(ao&&po+m*ao===ro)return pn+m*an}
     if(g.length===1){const go=pickI(g[0].o,i),gn=pickI(g[0].n,i),k=d/go;if(go>0&&Number.isInteger(k)&&Math.abs(k)>=1&&Math.abs(k)<=4)return Math.max(1,pn-gn*k)}
-    return Math.max(1,pn-Math.round(d*P.rs))})}
+    if(Math.abs(d)>po*0.15)return propSt(ro,P);
+    return Math.max(1,pn+(propSt(ro,P)-propSt(po,P)))})}
 function finalize(L,P){
   if(L.skip)return{segs:[{t:L.line}],changed:0,flag:null};
   const segs=[];let last=0,changed=0;
@@ -482,25 +531,55 @@ function finalize(L,P){
     if(r.off>last)segs.push({t:L.line.slice(last,r.off)});segs.push(r);last=r.off+r.len;changed++});
   if(last<L.line.length)segs.push({t:L.line.slice(last)});
   return{segs,changed,flag:L.flag,after:L.after||null,shape:L.shape||null,head:L.headLike||false}}
+/* Stitch definitions and abbreviations are frozen. Cable and lace panels keep their width; only the plain stitches around them change. */
+const PANEL_RE=/(\d+)\s*(?:sts?|stitches)\s+(?:in\s+)?(?:pat(?:t|tern)?|panel)\b|pat(?:t|tern)?\s*#?\s*\d+\b[^,.;]{0,24}?(?:\bon\s+)?(\d+)\s*(?:sts?|stitches)\b/gi;
+function panelMentions(t){return(t.match(PANEL_RE)||[]).length}
+function sectionInfo(lines){
+  const defStart=/^\s*(?:abbreviations?\b|special\s+(?:stitches|abbreviations)|stitch(?:es)?\s+(?:guide|patterns?)\b|pattern\s+stitch(?:es)?\b|(?:pattern|patt?)\s*#?\s*\d+\b|[A-Za-z][A-Za-z \/-]{1,30}\s+(?:pattern|stitch)\s*(?:\(\s*\d+\s*sts?\s*\))?\s*:?\s*$)/i;
+  const pieceHead=/^\s*(?:back|front|left\s+front|right\s+front|sleeves?|body|yoke|collar|neck\s*band|hood|finishing|instructions|directions|begin\b.*|separate\b.*|brim|crown|cuff|leg|foot|heel|toe)\s*:?\s*$/i;
+  const sizeRun=t=>(t.match(new RegExp(GROUP.source,'g'))||[]).some(r=>(r.match(/\d+/g)||[]).length>=3&&/[,(\[]/.test(r));
+  const abbr=/^\s*(?:[A-Z]{1,4}\d[\w\/]*|[A-Za-z]{1,4}\d\/\d)\s*[:=”"]/;
+  const frozen=[],piece=[],panelF={};let def=false,pc=0;
+  lines.forEach((l,i)=>{const t=l.text.trim();
+    if(defStart.test(t))def=true;
+    else if(pieceHead.test(t)||(l.head&&!defStart.test(t))||sizeRun(t))def=false;
+    if(!def&&(pieceHead.test(t)||l.head))pc++;
+    frozen[i]=def||abbr.test(t);piece[i]=pc;
+    if(!frozen[i]){let m;const re=new RegExp(PANEL_RE.source,'gi');let sum=0;while((m=re.exec(t)))sum+=+(m[1]||m[2]);if(sum)panelF[pc]=(panelF[pc]||0)+sum}});
+  const back=Math.max(0,...Object.values(panelF));
+  lines.forEach((l,i)=>{if(!panelF[piece[i]]&&back&&/\b(?:as\s+(?:for|on)\s+(?:the\s+)?back|same\s+as\s+(?:the\s+)?back)\b/i.test(l.text))panelF[piece[i]]=back});
+  return{frozen,piece,panelF}}
 /* Walks the pattern top to bottom, carrying the live stitch count forward the way a knitter does. */
 function convertAll(model,p){
   const P=params(p),sz=p.size||0;let sect='';
-  const parsed=model.lines.map(l=>{const t=l.text.trim();if(l.head||(t.length<40&&/^[A-Z][A-Z0-9 &'’:\-]+$/.test(t)&&/[A-Z]{3}/.test(t)))sect=t;
-    return parseLine(l.text,Object.assign({},P,{dLen:/sleeve|cuff|arm\b/i.test(sect)?P.dSleeve:P.dBody}))});
-  let prev=null,pending=null;
-  const expire=()=>{if(pending){pending.L.flag=pending.L.flag||{text:'This line’s numbers depend on a stitch count the app couldn’t find nearby. Check it by hand.'};pending=null}};
+  const info=sectionInfo(model.lines);
+  const parsed=model.lines.map((l,i)=>{const t=l.text.trim();if(l.head||(t.length<40&&/^[A-Z][A-Z0-9 &'’:\-]+$/.test(t)&&/[A-Z]{3}/.test(t)))sect=t;
+    if(info.frozen[i])return{line:l.text,raw:[],skip:true,flag:null,times:[],every:[],frozen:true};
+    const F=info.panelF[info.piece[i]]||0;
+    return parseLine(l.text,Object.assign({},P,{dLen:/sleeve|cuff|arm\b/i.test(sect)?P.dSleeve:P.dBody,panelF:F,panelSetup:F>0&&panelMentions(l.text)>=2}))});
+  let prev=null,pending=null,acc=null;
+  const pieceStart=L=>{const t=L.line;return!!L.co&&!/backward loop|on your right needle|at the underarm|more sts|repeat from|\bjoin/i.test(t)&&(/^\s*(?:with\b[^.]{0,60}?,\s*)?(?:cast\s+on|co)\b/i.test(t)||L.co.o[0]>8)};
+  const addAcc=(L,upto)=>{L.raw.forEach(x=>{if(x.k!=='co'||(upto!=null&&x.off>upto))return;acc=acc||{o:[],n:[]};const n=Math.max(acc.o.length,x.o.length);
+    for(let i=0;i<n;i++){acc.o[i]=(acc.o[i]||0)+pickI(x.o,i);acc.n[i]=(acc.n[i]||0)+pickI(x.n,i)}})};
+  const expire=()=>{if(pending&&info.panelF[info.piece[pending.i]]){pending=null;return}
+    if(pending){pending.L.flag=pending.L.flag||{text:'This line’s numbers depend on a stitch count the app couldn’t find nearby. Check it by hand.'};pending=null}};
   parsed.forEach((L,i)=>{
     if(L.skip)return;
     if(pending&&i-pending.i>2)expire();
     const r=L.res;
     const recentInc=parsed.slice(Math.max(0,i-3),i).some(x=>/\b(?:inc|dec|kfb|m1[lrp]?|k2tog|ssk|yo)\b/i.test(x.line));
     L.times=(L.shapeSelf||(L.repRows&&recentInc))?L.timesAll:[];
-    if(L.co&&L.co.o[0]>8){expire();prev={o:L.co.o,n:L.co.n}}
-    if(L.rep){expire();resolveRep(L,r,prev,P,sz);if(!r&&prev&&!L.rep.times&&!/\bto\s+(?:\d+\s+sts?\s+before\s+)?(?:marker|m\b|bor\b|end\b|last\b)/i.test(L.rep.body)&&/\b(?:k2tog|ssk|p2tog|k3tog|sk2p|s2kp|cdd|m1|kfb|yo|dec|inc)/i.test(L.line))pending={i,L,type:'rep'}}
-    else if(L.times.length){expire();if(r||L.times.length>1)resolveShaping(L,r,prev,P,sz);else pending={i,L,type:'shape'}}
-    else if(r&&pending){const q=pending;pending=null;if(q.type==='rep')resolveRep(q.L,r,prev,P,sz);else resolveShaping(q.L,r,prev,P,sz)}
-    else if(r&&prev)resolveResidual(L,r,prev,P);
-    if(r)prev={o:r.o,n:r.n};
+    if(pieceStart(L)){expire();prev={o:L.co.o,n:L.co.n};acc=null}
+    else addAcc(L,r?r.off:null);
+    if(L.rep){expire();resolveRep(L,r,prev,L.P||P,sz);if(!r&&prev&&!L.rep.times&&!/\bto\s+(?:\d+\s+sts?\s+before\s+)?(?:marker|m\b|bor\b|end\b|last\b)/i.test(L.rep.body)&&/\b(?:k2tog|ssk|p2tog|k3tog|sk2p|s2kp|cdd|m1|kfb|yo|dec|inc)/i.test(L.line))pending={i,L,type:'rep'}}
+    else if(L.times.length){expire();if(r||L.times.length>1)resolveShaping(L,r,prev,L.P||P,sz);else pending={i,L,type:'shape'}}
+    else if(r&&pending){const q=pending;pending=null;if(q.type==='rep')resolveRep(q.L,r,prev,L.P||P,sz);else resolveShaping(q.L,r,prev,L.P||P,sz)}
+    else if(r&&prev)resolveResidual(L,r,prev,L.P||P,acc);
+    if(L.raw!==undefined&&!L.skip&&!L.frozen&&prev&&info.panelF[info.piece[i]]&&panelMentions(L.line)>=2&&!L.flag){
+      const d=pickI(prev.n,sz)-pickI(prev.o,sz);
+      if(d){const a=Math.abs(d),h=Math.floor(a/2),word=d>0?'extra':'fewer';
+        L.flag={note:true,text:`Gauge kept the cable panels as written and ${d>0?'widened':'narrowed'} this piece by ${a} stitch${a>1?'es':''}. Work ${h===a-h?`${h} ${word} plain stitch${h>1?'es':''} at each side edge`:`${h} ${word} plain stitch${h===1?'':'es'} at one side edge and ${a-h} at the other`}, outside the panels.`}}}
+    if(r){prev={o:r.o,n:r.n};acc=null}
     L.after=prev});
   expire();
   return parsed.map(L=>finalize(L,P))}
@@ -718,7 +797,7 @@ function textView(p,model){
     const body=c.segs.map(s=>s.t!==undefined?esc(s.t):`<span class="mk">${numHTML(s,p)}${p.showOrig?`<s>${esc(s.src)}</s>`:''}</span>`).join('');
     const cls=[l.head?'head':'',i<p.line?'done':'',i===p.line?'cur':''].join(' ');
     const cnt=i===p.line?countTag(C,i,p):'';
-    return`${sep}<button class="ln ${cls}" data-act="line" data-i="${i}" id="ln${i}">${cnt?`<span class="lcnt">${cnt}</span>`:''}${body}${c.flag?`<span class="fnote">${esc(flagText(c.flag))}</span>`:''}</button>`}).join('');
+    return`${sep}<button class="ln ${cls}" data-act="line" data-i="${i}" id="ln${i}">${cnt?`<span class="lcnt">${cnt}</span>`:''}${body}${c.flag?`<span class="fnote${c.flag.note?' note':''}">${esc(flagText(c.flag))}</span>`:''}</button>`}).join('');
   return model.lines.length?`<div class="tl t${p.textSize||0}">${html}</div>`:'<p class="small">No pattern text yet. Tap Fit to paste it in.</p>'}
 function countTag(C,i,p){const n=countAt(C,i,p.size||0);if(n==null)return'';const before=i>0?countAt(C,i-1,p.size||0):null;return(before!=null&&before!==n?'→ ':'')+n+' sts'}
 
@@ -740,20 +819,25 @@ async function pageView(p,model,host){
     try{const page=await doc.getPage(i+1);const dpr=Math.min(3,window.devicePixelRatio||1);const mp=model.pages[i],x0=mp.x0||0,y0=mp.y0||0;const vp=page.getViewport({scale:c.scale*dpr,offsetX:-x0*c.scale*dpr,offsetY:-y0*c.scale*dpr});
       c.cv.width=Math.floor(cw*dpr);c.cv.height=Math.floor(((mp.y1??mp.h)-y0)*c.scale*dpr);await page.render({canvasContext:c.cv.getContext('2d'),viewport:vp}).promise;c.done=true;c.ld.remove()}catch(e){c.ld.textContent='Could not draw this page'}}}
 function itemAt(line,i){let r=line.items[0];for(const it of line.items)if(it.start<=i)r=it;return r}
+function chipFor(l,off,len){const a=itemAt(l,off),b=itemAt(l,off+len-1);
+  const x1=a.x+(off-a.start)/Math.max(1,a.str.length)*a.w,x2=b.x+(off+len-b.start)/Math.max(1,b.str.length)*b.w;return{x1,x2,y:a.y,h:a.h}}
 function drawOverlays(p,model){
   const cache=S.pageCache[p.id];if(!cache)return;const C=model.hasText?convertAll(model,p):[];
   cache.pages.forEach(c=>{c.ov.innerHTML=''});
   const parts=cache.pages.map(()=>[]);
   model.lines.forEach((l,i)=>{
     if(l.page<0||!cache.pages[l.page])return;const c=cache.pages[l.page],k=c.scale,X=model.pages[l.page].x0||0,Y=model.pages[l.page].y0||0;
-    if(i===p.line){const tag=model.hasText?countTag(C,i,p):'';parts[l.page].push(`<div class="ruler" id="ruler" style="top:${((l.y-Y-l.h*1.12)*k).toFixed(1)}px;height:${(l.h*1.55*k).toFixed(1)}px">${tag?`<span class="rtag">${tag}</span>`:''}</div>`)}
+    const top=(l.top??(l.y-l.h*0.9)),bot=(l.bot??(l.y+l.h*0.3));
+    if(i===p.line){const tag=model.hasText?countTag(C,i,p):'';parts[l.page].push(`<div class="ruler" id="ruler" style="top:${((top-Y-l.h*0.2)*k).toFixed(1)}px;height:${((bot-top+l.h*0.4)*k).toFixed(1)}px">${tag?`<span class="rtag">${tag}</span>`:''}</div>`)}
     if(!model.hasText)return;
     const cv=C[i];
     if(cv.flag)parts[l.page].push(`<span class="fl" style="top:${((l.y-Y-l.h*0.55)*k-4).toFixed(1)}px"></span>`);
     cv.segs.forEach(s=>{if(s.t!==undefined)return;
-      const a=itemAt(l,s.off),b=itemAt(l,s.off+s.len-1);
-      const x1=a.x+(s.off-a.start)/Math.max(1,a.str.length)*a.w,x2=b.x+(s.off+s.len-b.start)/Math.max(1,b.str.length)*b.w;
-      parts[l.page].push(`<span class="nv" style="left:${((x1-X)*k-1).toFixed(1)}px;top:${((l.y-Y-l.h*0.84)*k).toFixed(1)}px;min-width:${((x2-x1)*k+5).toFixed(1)}px;height:${(l.h*1.04*k).toFixed(1)}px;font-size:${(l.h*0.92*k).toFixed(1)}px">${numHTML(s,p,true)}</span>`)})});
+      const nums=[...s.src.matchAll(/\d+(?:\.\d+)?(?:st|nd|rd|th)?/gi)];if(!nums.length)return;
+      const j=Math.min(p.size||0,nums.length-1),m=nums[j],v=s.n[Math.min(j,s.n.length-1)];
+      if(v===s.o[Math.min(j,s.o.length-1)]&&s.k!=='yd'&&s.k!=='skein')return;
+      const g=chipFor(l,s.off+m.index,m[0].length),suf=s.ord?ordSuffix(v):'';
+      parts[l.page].push(`<span class="nv" style="left:${((g.x1-X)*k-2).toFixed(1)}px;top:${((g.y-Y-g.h*0.72)*k).toFixed(1)}px;min-width:${((g.x2-g.x1)*k+4).toFixed(1)}px;height:${(g.h*1.02*k).toFixed(1)}px;font-size:${(g.h*0.95*k).toFixed(1)}px">${v}${suf}</span>`)})});
   cache.pages.forEach((c,i)=>{c.ov.innerHTML=parts[i].join('');c.ov.dataset.page=i})}
 
 /* ---------- render ---------- */
@@ -795,7 +879,7 @@ async function addPdf(file){
   migrate(p);S.projects.push(p);S.id=p.id;S.view='setup';await putPdf(p.id,buf);
   $('app').innerHTML='<div class="loading"><span class="eyebrow">Reading pattern</span><span class="n">…</span></div>';
   const model=await ensureModel(p);
-  if(model.title&&model.title.length<80)p.name=model.title;
+  if(model.title&&model.title.length<80&&!/^(?:untitled|document\d*|microsoft word.*)$/i.test(model.title.trim()))p.name=model.title;
   const d=detect(model.lines);
   if(d.s){p.pat={s:d.s,r:d.r};p.unit=d.unit;p.found.gauge=true}
   if(d.mult){p.mult=d.mult;p.plus=d.plus;p.found.mult=true}
@@ -826,7 +910,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 document.addEventListener('click',async e=>{
   const ov=e.target.closest('.ov');
   if(ov){const p=cur(),m=S.models[p.id],c=S.pageCache[p.id].pages[+ov.dataset.page];const r=ov.getBoundingClientRect();const y=(e.clientY-r.top)/c.scale;
-    let best=-1,bd=1e9;m.lines.forEach((l,i)=>{if(l.page!==+ov.dataset.page)return;const d=Math.abs(l.y-l.h*0.35-y);if(d<bd){bd=d;best=i}});
+    let best=-1,bd=1e9;m.lines.forEach((l,i)=>{if(l.page!==+ov.dataset.page)return;const t=l.top??(l.y-l.h*0.9),bt=l.bot??(l.y+l.h*0.3),d=y<t?t-y:y>bt?y-bt:0;if(d<bd){bd=d;best=i}});
     if(best>=0){setLine(p,best);updateLine(false)}return}
   const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act,p=cur();
   if(a!=='del')S.confirmDel=false;
