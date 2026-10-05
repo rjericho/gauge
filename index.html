@@ -53,6 +53,7 @@ button{cursor:pointer;background:none;border:0;padding:0;text-align:left}
 .tlink{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);border-bottom:1.5px solid var(--ink);padding-bottom:2px;cursor:pointer}
 .tlink.danger{color:var(--flag);border-color:var(--flag)}
 .msg{font-size:14px;color:var(--mute);margin:14px 0 0}
+.empty{display:grid;gap:18px;justify-items:start;padding:8px 44px 0 0}.empty .sentence{margin:0}
 
 /* home */
 .home{position:relative;flex:1;display:flex;flex-direction:column;padding-bottom:30px}
@@ -254,7 +255,7 @@ function migrate(p){if(!p.yarnPat)p.yarnPat={yds:'',g:'',needle:''};if(!p.yarnMi
   if(!p.swatch)p.swatch={on:false,s:'',r:''};if(!p.fit)p.fit={on:false,body:'',ease:'',dBody:0,dSleeve:0,patBust:''};syncMine(p);if(!Array.isArray(p.counters)||!p.counters.length){p.counters=[{name:'Rows',row:p.row||0,rep:p.rep||0,repLen:p.repLen||0,line:p.line||0,anchor:null}];p.cur=0}
   if(p.cur==null||!p.counters[p.cur])p.cur=0;const c=p.counters[p.cur];p.row=c.row;p.rep=c.rep;p.repLen=c.repLen;p.line=c.line;p.anchor=c.anchor||null;if(p.textSize==null)p.textSize=0;return p}
 function load(){try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(d&&Array.isArray(d.projects))S.projects=d.projects.map(migrate)}}catch(e){}
-  if(!S.projects.some(p=>p.example)&&!S.projects.length)S.projects.push(migrate(example()))}
+  S.projects=S.projects.filter(p=>!p.example||p.keep)}
 
 /* ---------- PDF storage (IndexedDB, falls back to memory) ---------- */
 let idbP=null;
@@ -966,16 +967,16 @@ function home(){
         <span class="pair"><span class="big o">${esc(p.pat.s||'–')}</span>${ARROW}<span class="big">${hasMine?esc(p.mine.s):'?'}</span><span class="unit">sts</span></span>
         <span class="pair"><span class="big o">${esc(p.pat.r||'–')}</span>${ARROW}<span class="big">${hasMine?esc(p.mine.r):'?'}</span><span class="unit">rows</span></span>
       </div>
-      ${quiet?`<div class="pmeta"><span>${esc(meta)}</span><span class="eyebrow">${p.example?'Example':esc(p.sizeLabel||'')}</span></div>`:
+      ${quiet?`<div class="pmeta"><span>${esc(meta)}</span><span class="eyebrow">${p.example?'Sample':esc(p.sizeLabel||'')}</span></div>`:
       `<div class="yarn" aria-hidden="true"><i style="width:${progressPct(p)}%"></i></div>
-       <div class="pmeta"><span class="tnum">Row ${p.row||0}${p.sizeLabel?` · ${esc(p.sizeLabel)}`:''}${p.example?' · Example':''}</span><span class="pct tnum">${progressPct(p)}%</span></div>`}
+       <div class="pmeta"><span class="tnum">Row ${p.row||0}${p.sizeLabel?` · ${esc(p.sizeLabel)}`:''}${p.example?' · Sample':''}</span><span class="pct tnum">${progressPct(p)}%</span></div>`}
     </button>`}).join('');
   return`<div class="home">
     <div class="strand" aria-hidden="true"></div>
     <header class="mast">${BALL}<p class="eyebrow">On the needles · ${S.projects.length}</p>
       <h1 class="word">Gauge</h1>
       <p class="tag">Any pattern, rewritten for the yarn in your hands.</p></header>
-    ${list}
+    ${list||`<div class="empty"><p class="sentence">Add a pattern PDF and every count is rewritten for your yarn.</p><button class="tlink" data-act="sample">Try it on a sample pattern</button></div>`}
     ${S.msg?`<p class="msg">${esc(S.msg)}</p>`:''}
     <div class="links"><span class="eyebrow">Saved on this phone</span>
       ${S.dl?'<button class="tlink" data-act="backup">Save a backup</button>':''}
@@ -1079,7 +1080,7 @@ function setup(p,model){
     <label class="vh" for="f-notes">Notes</label><textarea id="f-notes" data-f="notes" placeholder="Needle size, swatch details, changes you made">${esc(p.notes)}</textarea></section>
   <button class="cta" data-act="knit"><span>Start knitting</span><span class="plus" aria-hidden="true">→</span></button>
   <div class="sfoot">
-    ${p.example?'<span class="eyebrow">Example pattern</span>':`<button class="tlink danger" data-act="del">${S.confirmDel?'Tap again to delete':'Delete project'}</button>`}
+    ${p.example?'<span class="eyebrow">Sample pattern</span>':''}<button class="tlink danger" data-act="del">${S.confirmDel?'Tap again to delete':p.example?'Remove sample':'Delete project'}</button>
     <span class="eyebrow">Saved as you type</span></div>`}
 function refreshSetup(p){const m=S.models[p.id];if(!m)return;const set=(id,h)=>{const e=$(id);if(e)e.innerHTML=h};
   set('readout',readout(p));set('gsrc',gaugeSource(p));set('yarnneed',yarnNeed(p,m));set('fitline',fitLine(p,m));
@@ -1241,6 +1242,7 @@ document.addEventListener('click',async e=>{
   if(a!=='del')S.confirmDel=false;
   switch(a){
     case'open':S.id=b.dataset.id;S.msg='';{const q=cur();S.view=ok(q.mine.s)&&ok(q.mine.r)?'knit':'setup'}render(true);break;
+    case'sample':{let q=S.projects.find(x=>x.example);if(!q){q=migrate(example());q.keep=true;q.updated=Date.now();S.projects.push(q);save()}S.id=q.id;S.msg='';S.view='setup';render(true);break}
     case'home':S.view='home';S.panel=null;render();break;
     case'setup':S.view='setup';S.panel=null;render();break;
     case'knit':S.view='knit';touch(p);render(true);break;
