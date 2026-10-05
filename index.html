@@ -235,7 +235,6 @@ textarea:focus{outline:none;border-color:var(--rule)}
 <script src="./pdf.min.js"></script>
 <script>
 (function(){
-const EX_B64="JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUiAvRjMgNCAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL0Jhc2VGb250IC9IZWx2ZXRpY2EgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YxIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKMyAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYS1Cb2xkIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nIC9OYW1lIC9GMiAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjQgMCBvYmoKPDwKL0Jhc2VGb250IC9IZWx2ZXRpY2EtT2JsaXF1ZSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjMgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iago1IDAgb2JqCjw8Ci9Db250ZW50cyAxMCAwIFIgL01lZGlhQm94IFsgMCAwIDYxMiA3OTIgXSAvUGFyZW50IDkgMCBSIC9SZXNvdXJjZXMgPDwKL0ZvbnQgMSAwIFIgL1Byb2NTZXQgWyAvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJIF0KPj4gL1JvdGF0ZSAwIC9UcmFucyA8PAoKPj4gCiAgL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjYgMCBvYmoKPDwKL0NvbnRlbnRzIDExIDAgUiAvTWVkaWFCb3ggWyAwIDAgNjEyIDc5MiBdIC9QYXJlbnQgOSAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNyAwIG9iago8PAovUGFnZU1vZGUgL1VzZU5vbmUgL1BhZ2VzIDkgMCBSIC9UeXBlIC9DYXRhbG9nCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9BdXRob3IgKEV4YW1wbGUgUGF0dGVybiBDby4pIC9DcmVhdGlvbkRhdGUgKEQ6MjAyNjEwMDQxMDMyMjMtMDcnMDAnKSAvQ3JlYXRvciAoYW5vbnltb3VzKSAvS2V5d29yZHMgKCkgL01vZERhdGUgKEQ6MjAyNjEwMDQxMDMyMjMtMDcnMDAnKSAvUHJvZHVjZXIgKFJlcG9ydExhYiBQREYgTGlicmFyeSAtIFwob3BlbnNvdXJjZVwpKSAKICAvU3ViamVjdCAodW5zcGVjaWZpZWQpIC9UaXRsZSAoUmlkZ2VsaW5lIEhhdCkgL1RyYXBwZWQgL0ZhbHNlCj4+CmVuZG9iago5IDAgb2JqCjw8Ci9Db3VudCAyIC9LaWRzIFsgNSAwIFIgNiAwIFIgXSAvVHlwZSAvUGFnZXMKPj4KZW5kb2JqCjEwIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDY2Mgo+PgpzdHJlYW0KR2F0PSg5b24hXidZTyNmanA4IygpRVQpRlVgTzNnREhFUVo9TCpeam9UMFJjL3I+M3M7bkUiQzArUEByIWBgT2Y2XkkqdTFOMjdaNlUySC9uIkwkQ1YwSSglXmM5YVc9UUR0Q2tFcikvMnBXJz9tPGZjTlNuMUVCQD4lS0M8QWpWS1o8VztbLlkvK3UqP2I8OG9dP3FvQDVFWlpxWVZPMFMtMD01JDgoalNQZGUyaDIwK2cuLjwoQWxLKy1sYkZYOVdvXGlEL1xaUUU+YFdzIVU2WzZjRERONzFSM1hGJHJOTmQtKF8mOnAkbS9bMmhOcTliOT5TWkVDSFtEamhUaWhPO01wXms/SWxnRzUqT2AvXyQjJSxeP0plSzM/Ql0zKmBANTtrMk1oZldiYDxERyxKKFgjVTA6TyElQG9yXFosSERJI3JqOkheKCgxWi9AKG1XWSQkb29NOktyLG1Qcit1XTddRDtvXWI0TUk2OzUwYWA0Yk5EWW00I1pRMzBcTlwmKlhoKEdcTU9FTFAxRSppQU8xb3VLSVRuTDtxJUpqWjttLSsqdCRmLE8lLGQ2VXEvMz1BQWknVGdKKGRUbDEtTnRWY2stcSUyRTFWcllhMGV1YjtLKjNhJipda0lEOUxFczddUGF1anAzQHMlR0UjUVJzKUlRaTxSUmpxQ29oRmU7JkxtJFlzRnJGWGpBLCpbTS1bR1FRc2ssNDNRWTorU1hASnFxM0spalxeNVwuMVg/OWs1ZUFPPEdDcTw7PG4+P2BcdGYlLCMhUFNVSGtdWGBROG8sZm5zZyldUS9BTWY6Q2lwaXQhOnRBSjxNISsqKCI8MlciZmM2VllVJFtWOUpXYChsMzhqLDtiaSg7RExbfj5lbmRzdHJlYW0KZW5kb2JqCjExIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDgwNgo+PgpzdHJlYW0KR2F0PWloK2xdaSY7QlJ1TVJgayNnb1MzZzhVRXJWRCsjPkM/alRpbUFuK1ZRJzcxYiVmMG04N1pZTEAnPEgmJXQnTGc8bWM4WHExTiM+PVFfc0RTTiInZDJCbCdfWUUrQlxhKi9yL0w4SHFSNiRGNzglLjJJJGk1THFGJD4yNFJ1KkIidVY2SCViOFYyNC0iZVw6RytgaCFmOlhgM1xGc1YoU0ZDNzktI19NM3E8LDVVb3FITkonOUdMWFR1JGN1bzlGJHNNSnVuQEs7XjY3cF1VIWVlZVVZcGghXyMuQkxwS0RBWG1XMj5jSFpdRE1YNEgoTVNJIzRdRC5AXDFTPStQMXBcT1VTXTxrRTpqN1FwTnU7Uj1cZ0ljRUdtblwwT2olQk5OLV9gOCFsSWNRQlo6VlhbUyQ0WlxVa2JLZ109SzhaXSlGYEMwQ2s3XylWMCJzUlJuYW5pUGchPio/YV1vTDxUczF1UWFeJUc1JSVDM1wuL0lBI2FxSE1XIkxTMFtFRjdDPV9iYCI8NmtiZlcyLSovPzQuKF1hM1k4OExyYCdWYTlsS2BeKiZhc2JPUE8iIm5Bc3Q+Mjd1XDU+WT5rMGNQVk8vVGs2YVdqOEwrPGQ6bUNJYVhTbWVbO1Y1WV0kT0JTITNKNE9vZ1YiJEVVMUZvMmYrcVptL1RNOShKa1A1bk1iTz0uITBuQ14zZ2lZPENfJkxSSkxDTHBXKU4iJm1kMyEkLyguLjdcRkpeK3NKXkojSSInJXQiMT1TY0syPEozbWFYNnNVblJgcmBNaSE6Zjs7T0RmW0UoZjFkMm1bPypsPSU8Pl5HUipIajw6KF86cE9UZ1RvI0g4Py1RakhsLGpxcCZfMF5fMUlBIkFuVHUvUyUwVGxHSVZpM2BKcllYI3BBJmVnLVlAbUlbaDJnN2VxWmZVOlRESk5NZFNiRS1NQUJITmlsUzkyNXMqdWxFKUJYZyxfXFJJZD0+KENHcWdHMkEjOTc0cURWXFtKTS1QJ0E3LDQyZ3FSTU4iZSomY2AzbiI5V18oZlNuOnJsJFVYWFhyX29XOSxQTkNzfj5lbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCAxMgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwNjEgMDAwMDAgbiAKMDAwMDAwMDExMiAwMDAwMCBuIAowMDAwMDAwMjE5IDAwMDAwIG4gCjAwMDAwMDAzMzEgMDAwMDAgbiAKMDAwMDAwMDQ0NiAwMDAwMCBuIAowMDAwMDAwNjQwIDAwMDAwIG4gCjAwMDAwMDA4MzQgMDAwMDAgbiAKMDAwMDAwMDkwMiAwMDAwMCBuIAowMDAwMDAxMTc4IDAwMDAwIG4gCjAwMDAwMDEyNDMgMDAwMDAgbiAKMDAwMDAwMTk5NiAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9JRCAKWzwzZjRhZjg1YWI1YWNhZDFmYjdhODE5MDZkOWUwZjBhOT48M2Y0YWY4NWFiNWFjYWQxZmI3YTgxOTA2ZDllMGYwYTk+XQolIFJlcG9ydExhYiBnZW5lcmF0ZWQgUERGIGRvY3VtZW50IC0tIGRpZ2VzdCAob3BlbnNvdXJjZSkKCi9JbmZvIDggMCBSCi9Sb290IDcgMCBSCi9TaXplIDEyCj4+CnN0YXJ0eHJlZgoyODkzCiUlRU9GCg==";
 const KEY='gauge.v1';
 const S={projects:[],view:'home',id:null,models:{},docs:{},pageCache:{},mem:{},dl:null,wake:null,wantWake:false,confirmDel:false,msg:'',panel:null};
 const $=id=>document.getElementById(id);
@@ -249,13 +248,12 @@ function pieceNames(model){const out=[];(model.lines||[]).forEach(l=>{if(!l.head
 function b64ToBuf(b){const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u.buffer}
 function bufToB64(buf){const u=new Uint8Array(buf);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)}
 
-function example(){return{id:'example',example:true,name:'Ridgeline Hat',file:'ridgeline-hat.pdf',unit:'in',pat:{s:20,r:28},mine:{s:18,r:24},mult:4,plus:0,keepEven:true,size:1,row:12,rep:0,repLen:0,line:17,view:'page',showOrig:false,notes:'',pasted:'',sizeLabel:'Adult S',found:{gauge:true,mult:true,yards:true,label:true},yarnPat:{yds:220,g:100,needle:'US 8 (5 mm)'},yarnMine:{yds:200,g:100,needle:'US 9 (5.5 mm)',s:18,r:24},updated:0}}
 function syncMine(p){const sw=p.swatch||{},ym=p.yarnMine||{};const src=sw.on&&ok(sw.s)&&ok(sw.r)?sw:ym;p.mine={s:src.s,r:src.r};return p}
 function migrate(p){if(!p.yarnPat)p.yarnPat={yds:'',g:'',needle:''};if(!p.yarnMine)p.yarnMine={yds:'',g:'',needle:'',s:(p.mine||{}).s||'',r:(p.mine||{}).r||''};
   if(!p.swatch)p.swatch={on:false,s:'',r:''};if(!p.fit)p.fit={on:false,body:'',ease:'',dBody:0,dSleeve:0,patBust:''};syncMine(p);if(!Array.isArray(p.counters)||!p.counters.length){p.counters=[{name:'Rows',row:p.row||0,rep:p.rep||0,repLen:p.repLen||0,line:p.line||0,anchor:null}];p.cur=0}
   if(p.cur==null||!p.counters[p.cur])p.cur=0;const c=p.counters[p.cur];p.row=c.row;p.rep=c.rep;p.repLen=c.repLen;p.line=c.line;p.anchor=c.anchor||null;if(p.textSize==null)p.textSize=0;return p}
 function load(){try{const r=localStorage.getItem(KEY);if(r){const d=JSON.parse(r);if(d&&Array.isArray(d.projects))S.projects=d.projects.map(migrate)}}catch(e){}
-  S.projects=S.projects.filter(p=>!p.example||p.keep)}
+  S.projects=S.projects.filter(p=>!p.example)}
 
 /* ---------- PDF storage (IndexedDB, falls back to memory) ---------- */
 let idbP=null;
@@ -263,7 +261,7 @@ function idb(){if(!idbP)idbP=new Promise((res,rej)=>{try{const r=indexedDB.open(
 async function putPdf(id,buf){S.mem[id]=buf;try{const db=await idb();await new Promise((res,rej)=>{const t=db.transaction('pdfs','readwrite');t.objectStore('pdfs').put(buf,id);t.oncomplete=res;t.onerror=()=>rej(t.error)})}catch(e){}}
 async function getPdf(id){if(S.mem[id])return S.mem[id];try{const db=await idb();return await new Promise((res,rej)=>{const r=db.transaction('pdfs').objectStore('pdfs').get(id);r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error)})}catch(e){return null}}
 async function delPdf(id){delete S.mem[id];try{const db=await idb();db.transaction('pdfs','readwrite').objectStore('pdfs').delete(id)}catch(e){}}
-async function pdfBuf(p){return p.example?b64ToBuf(EX_B64):await getPdf(p.id)}
+async function pdfBuf(p){return await getPdf(p.id)}
 
 /* ---------- reading the PDF into lines ---------- */
 /* Split a page into columns when there is a clear vertical gutter between two blocks of text. */
@@ -345,7 +343,6 @@ async function ensureModel(p){
   }
   if(!model.hasText){model.lines=[];if(p.pasted&&p.pasted.trim())model.lines=p.pasted.split(/\r?\n/).filter(l=>l.trim()).map(t=>({page:-1,y:0,h:0,text:t.replace(/\s+$/,''),items:[]}))}
   markHeads(model.lines);
-  if(p.example&&!p.lineSet){const k=model.lines.findIndex(l=>/Repeat Rnd 1/.test(l.text));if(k>=0){p.line=k;if(p.counters&&p.counters[0])p.counters[0].line=k}p.lineSet=true}
   {const bi=bustInfo(model.lines);p.found=p.found||{};const nb=bi?bi.vals:null;if(JSON.stringify(p.found.bust||null)!==JSON.stringify(nb)){p.found.bust=nb;p.found.bustName=bi?bi.name:'';p.found.lenUnit=bi?bi.unit:'in';save()}}
   if(p.total!==model.lines.length){p.total=model.lines.length;save()}
   S.models[p.id]=model;return model}
@@ -967,16 +964,16 @@ function home(){
         <span class="pair"><span class="big o">${esc(p.pat.s||'–')}</span>${ARROW}<span class="big">${hasMine?esc(p.mine.s):'?'}</span><span class="unit">sts</span></span>
         <span class="pair"><span class="big o">${esc(p.pat.r||'–')}</span>${ARROW}<span class="big">${hasMine?esc(p.mine.r):'?'}</span><span class="unit">rows</span></span>
       </div>
-      ${quiet?`<div class="pmeta"><span>${esc(meta)}</span><span class="eyebrow">${p.example?'Sample':esc(p.sizeLabel||'')}</span></div>`:
+      ${quiet?`<div class="pmeta"><span>${esc(meta)}</span><span class="eyebrow">${esc(p.sizeLabel||'')}</span></div>`:
       `<div class="yarn" aria-hidden="true"><i style="width:${progressPct(p)}%"></i></div>
-       <div class="pmeta"><span class="tnum">Row ${p.row||0}${p.sizeLabel?` · ${esc(p.sizeLabel)}`:''}${p.example?' · Sample':''}</span><span class="pct tnum">${progressPct(p)}%</span></div>`}
+       <div class="pmeta"><span class="tnum">Row ${p.row||0}${p.sizeLabel?` · ${esc(p.sizeLabel)}`:''}</span><span class="pct tnum">${progressPct(p)}%</span></div>`}
     </button>`}).join('');
   return`<div class="home">
     <div class="strand" aria-hidden="true"></div>
     <header class="mast">${BALL}<p class="eyebrow">On the needles · ${S.projects.length}</p>
       <h1 class="word">Gauge</h1>
       <p class="tag">Any pattern, rewritten for the yarn in your hands.</p></header>
-    ${list||`<div class="empty"><p class="sentence">Add a pattern PDF and every count is rewritten for your yarn.</p><button class="tlink" data-act="sample">Try it on a sample pattern</button></div>`}
+    ${list||`<div class="empty"><p class="sentence">Add a pattern PDF and every count is rewritten for your yarn.</p></div>`}
     ${S.msg?`<p class="msg">${esc(S.msg)}</p>`:''}
     <div class="links"><span class="eyebrow">Saved on this phone</span>
       ${S.dl?'<button class="tlink" data-act="backup">Save a backup</button>':''}
@@ -1080,7 +1077,7 @@ function setup(p,model){
     <label class="vh" for="f-notes">Notes</label><textarea id="f-notes" data-f="notes" placeholder="Needle size, swatch details, changes you made">${esc(p.notes)}</textarea></section>
   <button class="cta" data-act="knit"><span>Start knitting</span><span class="plus" aria-hidden="true">→</span></button>
   <div class="sfoot">
-    ${p.example?'<span class="eyebrow">Sample pattern</span>':''}<button class="tlink danger" data-act="del">${S.confirmDel?'Tap again to delete':p.example?'Remove sample':'Delete project'}</button>
+    <button class="tlink danger" data-act="del">${S.confirmDel?'Tap again to delete':'Delete project'}</button>
     <span class="eyebrow">Saved as you type</span></div>`}
 function refreshSetup(p){const m=S.models[p.id];if(!m)return;const set=(id,h)=>{const e=$(id);if(e)e.innerHTML=h};
   set('readout',readout(p));set('gsrc',gaugeSource(p));set('yarnneed',yarnNeed(p,m));set('fitline',fitLine(p,m));
@@ -1201,7 +1198,7 @@ function redraw(){const p=cur(),m=S.models[p.id];$('dockin').innerHTML=dockHTML(
 /* ---------- adding and backing up ---------- */
 async function addPdf(file){
   const buf=await file.arrayBuffer();
-  const p={id:uid(),example:false,name:file.name.replace(/\.pdf$/i,'').replace(/[_-]+/g,' ').trim(),file:file.name,unit:'in',pat:{s:'',r:''},mine:{s:'',r:''},mult:0,plus:0,keepEven:true,size:0,row:0,rep:0,repLen:0,line:0,view:'page',showOrig:false,notes:'',pasted:'',found:{},updated:Date.now()};
+  const p={id:uid(),name:file.name.replace(/\.pdf$/i,'').replace(/[_-]+/g,' ').trim(),file:file.name,unit:'in',pat:{s:'',r:''},mine:{s:'',r:''},mult:0,plus:0,keepEven:true,size:0,row:0,rep:0,repLen:0,line:0,view:'page',showOrig:false,notes:'',pasted:'',found:{},updated:Date.now()};
   migrate(p);S.projects.push(p);S.id=p.id;S.view='setup';await putPdf(p.id,buf);
   $('app').innerHTML='<div class="loading"><span class="eyebrow">Reading pattern</span><span class="n">…</span></div>';
   const model=await ensureModel(p);
@@ -1214,7 +1211,7 @@ async function addPdf(file){
   if(d.ease!=null){p.fit.ease=d.ease;p.found.ease=d.ease}
   touch(p);render()}
 async function backup(){
-  const pdfs={};for(const p of S.projects){if(p.example)continue;const b=await getPdf(p.id);if(b)pdfs[p.id]=bufToB64(b)}
+  const pdfs={};for(const p of S.projects){const b=await getPdf(p.id);if(b)pdfs[p.id]=bufToB64(b)}
   const data=JSON.stringify({app:'gauge',version:1,projects:S.projects,pdfs});
   try{await S.dl.save({filename:'gauge-backup.json',data});S.msg='Backup saved. Keep it in Files or iCloud Drive.'}
   catch(e){S.msg=e&&e.code==='declined'?'':'This view can’t save files. Open the page in your browser and try again.'}
@@ -1242,7 +1239,6 @@ document.addEventListener('click',async e=>{
   if(a!=='del')S.confirmDel=false;
   switch(a){
     case'open':S.id=b.dataset.id;S.msg='';{const q=cur();S.view=ok(q.mine.s)&&ok(q.mine.r)?'knit':'setup'}render(true);break;
-    case'sample':{let q=S.projects.find(x=>x.example);if(!q){q=migrate(example());q.keep=true;q.updated=Date.now();S.projects.push(q);save()}S.id=q.id;S.msg='';S.view='setup';render(true);break}
     case'home':S.view='home';S.panel=null;render();break;
     case'setup':S.view='setup';S.panel=null;render();break;
     case'knit':S.view='knit';touch(p);render(true);break;
