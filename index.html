@@ -306,8 +306,8 @@ function joinLines(lines){
     if(prev&&prev.page===l.page&&!prev.head&&!l.head&&!l.foot&&!startsNew(l.text)){
       const lastW=prev.lastW,full=colW[prev.page+':'+prev.col]||lastW;
       const ended=/[.!?:]["”’)]*\s*$/.test(prev.text)&&(!/\b(?:sts?|approx|incl|rnd|rep|patt?|beg|foll|cont)\.\s*$/i.test(prev.text)||/^[A-Z]/.test(l.text));
-      const open=/(?:[,(\[]|--|\band|\bor)\s*$/i.test(prev.text);
-      if(prev.col===l.col){const gap=l.y-prev.lastY;join=gap>0&&gap<prev.lastH*1.9&&(open||(lastW>full*0.72&&!ended))}
+      const open=/(?:[,(\[;]|--|\band|\bor)\s*$/i.test(prev.text);
+      if(prev.col===l.col){const gap=l.y-prev.lastY;join=gap>0&&gap<prev.lastH*1.9&&(open||(lastW>full*0.72&&!ended)||(!ended&&/^[a-z]/.test(l.text)&&!/^\s*(?:k|p)\d/i.test(l.text)))}
       /* a sentence that runs off the bottom of one column continues at the top of the next */
       else if(l.col===prev.col+1)join=/^[a-z]/.test(l.text)&&!ended&&(open||lastW>full*0.72)}
     if(join){
@@ -361,18 +361,30 @@ function detect(lines){
   m=text.match(/US\s*(\d+(?:\.\d+)?)\s*\(\s*(\d+(?:\.\d+)?)\s*mm\s*\)/i);if(m)r.needle=`US ${m[1]} (${m[2]} mm)`;
   m=text.match(/(\d+(?:\.\d+)?)\s*(?:"|”|″|in(?:ches)?|cm)?\s*(?:of\s+)?positive ease/i);if(m)r.ease=+m[1];
   return r}
-function bustInfo(lines){const l=lines.find(x=>/\b(?:bust|chest|circumference)\b/i.test(x.text)&&!/\bsts?\b/i.test(x.text));if(!l)return null;
-  const runs=l.text.match(new RegExp(GROUP.source,'g'))||[];let best=null;runs.forEach(r=>{const v=r.match(/\d+(?:\.\d+)?/g).map(Number);if(!best||v.length>best.length)best=v});
-  if(!best)return null;return{vals:best,name:/bust/i.test(l.text)?'bust':/chest/i.test(l.text)?'chest':'circumference',unit:/cm/i.test(l.text)&&!/(?:"|”|in\b|inch)/i.test(l.text)?'cm':'in'}}
+function bustInfo(lines){
+  /* the finished bust/chest line, reading the run of plausible garment measurements (18in+ or 45cm+), which may wrap onto the next line */
+  let best=null;
+  lines.forEach((x,i)=>{if(!/\b(?:bust|chest|circumference|at\s+underarm)\b/i.test(x.text)||/\bsts?\b/i.test(x.text))return;
+    const cm=/cm/i.test(x.text)&&!/(?:"|”|in\b|inch)/i.test(x.text),min=cm?45:18;
+    const bonus=(/finish/i.test(x.text)?50:0)-(/to\s+fit|actual\s+(?:bust|chest)|body\s+(?:bust|chest)/i.test(x.text)?20:0);
+    for(let t of [x.text,(lines[i+1]||{}).text||'']){t=t.split(/\b(?:length|long|sleeve|armhole|depth)\b/i)[0];const runs=t.match(new RegExp(GROUP.source,'g'))||[];let local=null;
+      const singles=[];
+      for(const r of runs){const v=r.match(/\d+(?:\.\d+)?/g).map(Number);if(!v.every(q=>q>=min&&q<200))continue;if(v.length===1)singles.push(v[0]);
+        const score=v.length*10+bonus-(t===x.text?0:1);if(!local||score>local.score)local={score,vals:v}}
+      if(singles.length>=2&&(!local||local.vals.length<singles.length))local={score:singles.length*10+bonus-(t===x.text?0:1),vals:singles};
+      if(local&&(!best||local.score>best.score))best={score:local.score,vals:local.vals,name:/bust/i.test(x.text)?'bust':/chest/i.test(x.text)?'chest':'circumference',unit:cm?'cm':'in'};
+      if(local&&local.vals.length>1)break}});
+  return best?{vals:best.vals,name:best.name,unit:best.unit}:null}
 /* yards the pattern calls for in the chosen size, from a skein count or a yardage run */
 function patYards(model,p){const sz=p.size||0,yp=p.yarnPat||{};
   for(const l of model.lines){const m=l.text.match(new RegExp('('+GROUP.source+')\\s*(?:skeins?|balls?|hanks?)\\b','i'));if(m&&ok(yp.yds)){const v=m[1].match(/\d+(?:\.\d+)?/g).map(Number);return{yds:pickI(v,sz)*yp.yds,from:'skeins'}}}
   for(const l of model.lines){const re=new RegExp('('+GROUP.source+')\\s*(?:yds?|yards)\\b','gi');let m;while((m=re.exec(l.text))){const v=m[1].match(/\d+(?:\.\d+)?/g).map(Number);if(v.length>1||/yarn|total|approx/i.test(l.text))return{yds:pickI(v,sz),from:'yards'}}}
   return null}
 function sizeLabels(lines,n){
-  const i=lines.findIndex(l=>/^\s*(finished\s+)?sizes?\s*:?\s*$/i.test(l.text)||/^\s*sizes?\s*:/i.test(l.text));
-  if(i>=0){const t=(/^\s*sizes?\s*:/i.test(lines[i].text)?lines[i].text.replace(/^\s*sizes?\s*:\s*/i,''):(lines[i+1]||{}).text)||'';
-    const m=t.match(/^(.+?)\s*\((.+)\)/);if(m){const labs=[m[1],...m[2].split(/\s*,\s*/)].map(s=>s.trim()).filter(Boolean);if(labs.length===n)return labs}}
+  const i=lines.findIndex(l=>/^\s*(?:finished\s+)?sizes?\s*:?\s*$/i.test(l.text)||/^\s*(?:finished\s+)?sizes?\s*:/i.test(l.text));
+  if(i>=0){const t=(/^\s*(?:finished\s+)?sizes?\s*:\s*\S/i.test(lines[i].text)?lines[i].text.replace(/^\s*(?:finished\s+)?sizes?\s*:\s*/i,''):(lines[i+1]||{}).text)||'';
+    const m=t.match(/^(.+?)\s*\(([^()]+)\)/);if(m){const labs=[m[1],...m[2].split(/\s*,\s*/)].map(s=>s.trim()).filter(Boolean);if(labs.length===n)return labs}
+    else{const labs=t.replace(/[.”"]+$/,'').split(/\s*(?:,|\band\b|&|\/)\s*/).map(s=>s.trim()).filter(s=>s&&s.length<=12);if(labs.length===n&&n>1)return labs}}
   const bust=lines.find(l=>/\b(?:bust|chest)\b/i.test(l.text)&&!/\bsts?\b/i.test(l.text));
   if(bust){const runs=bust.text.match(new RegExp(GROUP.source,'g'))||[];const run=runs.find(x=>(x.match(/\d+(?:\.\d+)?/g)||[]).length===n);
     if(run){const u=/cm/i.test(bust.text)&&!/(?:"|in\b|inch)/i.test(bust.text)?' cm':'"';return run.match(/\d+(?:\.\d+)?/g).map(x=>x+u)}}
@@ -400,10 +412,12 @@ function classify(before,after){
   if(/pat(?:t|tern)?\s*#?\s*\d+\b[^,.;]{0,24}?(?:\bon\s+)?$/i.test(before)&&/^\s*(?:sts?|stitches)\b/i.test(after))return null;
   if(/(?:^|[^-])--\s*$/.test(before)&&!/^\s*(?:rows?|rnds?|rounds?)\b/i.test(after))return'st';
   if(/(?:cast\s+on|\bCO|pick[\s-]+up(?:\s+and\s+knit)?|\bPU)\s*(?:approx(?:imately|\.)?\s*)?$/i.test(before))return'co';
+  if(/\bBO\s*$/i.test(before)&&/^\s+(?:from|at)\b/i.test(after))return'st';
   if(/(?:sts?|stitch(?:es)?)\s+(?:count|total)\s*:?\s*$/i.test(before))return'st';
-  if(/^\s*(?:more\s+)?(?:sts?|stitches)\b/i.test(after)){
+  if(/^\s*(?:more\s+)?(?:marked\s+)?(?:sts?|stitches)\b/i.test(after)){
     if(/(?:\blast|\bfirst|\b(?:over|across)\s+(?:the\s+)?(?:next|center|centre|middle)?)\s*$/i.test(before))return null;
     return'st'}
+  if(/^\s*(?:RS|WS|RWS|right[- ]side|wrong[- ]side)\s+rows?\b/i.test(after)&&/\bnext\s*$/i.test(before))return'srow';
   if(/^\s*(?:more\s+)?(?:rows?|rnds?|rounds?)\b/i.test(after)){
     if(/\b(?:last|these|first|next|following|of|the)\s*$/i.test(before))return null;
     if(/^\s*(?:rows?|rnds?|rounds?)\s+(?:of|from)\s+(?:the\s+)?(?:chart|patt|pattern|rep|repeat|stripe|sequence|lace|cable|motif)/i.test(after))return null;
@@ -463,9 +477,11 @@ function parseLine(line,P){
     if(!kind&&!ord&&/^\s*,?\s*(?:[(\[][^)\]\d]*[)\]]\s*)*(?:more\s+)?times\b/i.test(after))kind='times';
     if(!kind)continue;
     const o=src.match(/\d+(?:\.\d+)?/g).map(Number);
-    L.raw.push({o,n:kind==='times'?o.slice():o.map(n=>convNum(n,kind,P)),k:kind,src,off,len:src.length,ord,
-      total:kind==='st'&&(/--\s*$/.test(before)||/\b(?:inc(?:rease|reasing)?|dec(?:rease|reasing)?)\b[^.;]{0,40}\bto\s*$|\b(?:inc|dec)\s+to\s*$/i.test(before)||/^\s*(?:sts?|stitches)\s*(?:remain|rem\b|total|in\s+total|on\s+(?:the\s+)?needle|\)|[.;:]|$)/i.test(after)||/(?:have|total of|=|there are)\s*$/i.test(before)||/(?:sts?|stitch(?:es)?)\s+(?:count|total)\s*:?\s*$/i.test(before)),
+    L.raw.push({o,n:(kind==='times'||kind==='srow')?o.slice():o.map(n=>convNum(n,kind,P)),k:kind,src,off,len:src.length,ord,
+      total:kind==='st'&&!/\b(?:cent(?:er|re)|middle|mark(?:ing)?|next|first|last|over|across|each|every|the)\s*$/i.test(before)&&(/--\s*$/.test(before)||/\b(?:inc(?:rease|reasing)?|dec(?:rease|reasing)?)\b[^.;]{0,40}\bto\s*$|\b(?:inc|dec)\s+to\s*$/i.test(before)||/^\s*(?:sts?|stitches)\s*(?:remain|rem\b|total|in\s+total|on\s+(?:the\s+)?needle|\)|[.;:]|$)/i.test(after)||/(?:have|total of|=|there are)\s*$/i.test(before)||/(?:sts?|stitch(?:es)?)\s+(?:count|total)\s*:?\s*$/i.test(before)),
       every:kind==='row'&&/every\s*$/i.test(before),more:kind==='times'&&/^\s*,?\s*(?:[(\[][^)\]\d]*[)\]]\s*)*more\b/i.test(after)})}
+  if(/\bend(?:ing)?\s+with\b|\bso\s+end\b/i.test(line))L.raw.forEach(x=>{if(x.k!=='row')return;
+    x.n=x.n.map((v,j)=>{const o=x.o[j];if(o<=2||v%2===o%2)return v;const ideal=o*P.rr;return Math.max(1,Math.abs(v+1-ideal)<=Math.abs(v-1-ideal)?v+1:v-1)})});
   L.co=L.raw.find(r=>r.k==='co');L.res=L.raw.find(r=>r.k==='st'&&r.total);L.every=L.raw.filter(r=>r.every);
   const star=line.match(/\*\s*(.+?)\s*[;,]?\s*rep(?:eat)?\s+from\s*\*/i);
   const par=line.match(/[\(\[]\s*([^()\[\]*]+?)\s*[\)\]]\s*(\d+)\s*(?:more\s+)?times/i);
@@ -523,15 +539,26 @@ function resolveShaping(L,r,prev,P,sz){
     let nr=Math.round((pn-ro*P.rs)/per);if(nr<1)nr=1;
     if(t.o.length===n||me)t.n[jt]=nr-(t.more?1:0);
     let every=null;
-    if(ev&&(ev.o.length===n||me)){const je=jFor(ev.o,n,i,sz);ev.n[je]=Math.max(1,Math.round(ev.o[je]*to*P.rr/nr));every=ev.n[je]}
+    if(ev&&(ev.o.length===n||me)){const je=jFor(ev.o,n,i,sz),ideal=ev.o[je]*to*P.rr/nr;ev.n[je]=Math.max(1,Math.round(ideal));
+      /* flat knitting: keep an even interval so the shaping rows stay on the same side, unless that would run past the rows the pattern allowed */
+      if(ev.o[je]%2===0&&ev.n[je]%2===1&&/\brows?\b/i.test(L.line)&&!L.inRound){const up=ev.n[je]+1,down=Math.max(2,ev.n[je]-1),budget=ev.o[je]*to*P.rr;
+        ev.n[je]=up*nr<=budget+2?up:(ideal-down<=1?down:ev.n[je])}
+      every=ev.n[je]}
     if(me){if(!every){const rw=L.raw.find(x=>x.k==='row'&&!x.every);if(rw)every=pickI(rw.n,jFor(rw.n,n,i,sz))}
       L.shape={every,times:nr,dec:per>0,per:Math.abs(per)}}
     return Math.max(1,pn-per*nr)})}
-function resolveResidual(L,r,prev,P,acc){
+function resolveResidual(L,r,prev,P,acc,sz){
   const g=L.raw.filter(x=>x.k==='st'&&!x.total);
-  r.n=r.o.map((ro,i)=>{const po=pickI(prev.o,i),pn=pickI(prev.n,i),d=po-ro;if(d===0)return pn;
+  const evenly=g.length===1&&/\b(inc|dec)\w*\s+\d[^.;]{0,30}?\bevenly\b/i.test(L.line);
+  r.n=r.o.map((ro,i)=>{const po=pickI(prev.o,i),pn=pickI(prev.n,i),d=po-ro;
+    if(evenly){const me=i===Math.min(sz,r.o.length-1);const t=me&&L.snap!=null?L.snap:propSt(ro,P);const j=jFor(g[0].o,r.o.length,i,sz);
+      if(g[0].o.length===r.o.length||me){g[0].n[j]=Math.abs(t-pn);
+        if(me&&!L.flag&&Math.sign(t-pn)!==Math.sign(ro-po)&&t!==pn)L.flag={note:true,text:`At your gauge this row needs to ${t>pn?'increase':'decrease'} ${Math.abs(t-pn)} sts to reach ${t}; the pattern ${ro>po?'increases':ro<po?'decreases':'keeps the count'} here.`}}
+      return t}
+    if(d===0)return pn;
     if(acc&&acc.o.length){const ao=pickI(acc.o,i),an=pickI(acc.n,i);for(const m of [1,2])if(ao&&po+m*ao===ro)return pn+m*an}
     if(g.length===1){const go=pickI(g[0].o,i),gn=pickI(g[0].n,i),k=d/go;if(go>0&&Number.isInteger(k)&&Math.abs(k)>=1&&Math.abs(k)<=4)return Math.max(1,pn-gn*k)}
+    const me=i===Math.min(sz,r.o.length-1);if(me&&L.snap!=null)return L.snap;
     if(Math.abs(d)>po*0.15)return propSt(ro,P);
     return Math.max(1,pn+(propSt(ro,P)-propSt(po,P)))})}
 function finalize(L,P){
@@ -602,6 +629,54 @@ function scaleParts(o,total,keepEven){const n=o.length,fixed=o.map(v=>v<=3);
       const i=o.map((v,i)=>i).filter(i=>!fixed[i]&&pairOf(i)<0).sort((a,b)=>o[b]-o[a])[0];if(i===undefined)return null;r[i]+=sgn;diff-=sgn;continue}
     moves.sort((a,b)=>a.err-b.err);const m=moves[0];r[m.i]+=sgn*unit[m.i];if(m.j>=0)r[m.j]+=sgn*unit[m.i];diff-=sgn*m.step}
   if(r.some(v=>v<1))return null;return r}
+/* Share a new total across weighted parts (a bind-off worked on 2 rows counts twice). Parts that move together share a group. */
+function scaleWeighted(o,w,grp,total,keepEven,evenMin,pre,bo){pre=pre||[];const n=o.length,fixed=o.map((v,i)=>v<=3||pre[i]!=null);const fv=o.map((v,i)=>pre[i]!=null?pre[i]:v);
+  const sumF=o.reduce((s,v,i)=>s+(fixed[i]?fv[i]*w[i]:0),0),sumR=o.reduce((s,v,i)=>s+(fixed[i]?0:v*w[i]),0);
+  if(sumR<=0||total-sumF<=0)return null;const k=(total-sumF)/sumR;
+  const unit=o.map((v,i)=>keepEven&&v%2===0&&v>=evenMin&&!(bo&&bo[i])?2:1);
+  const ideal=o.map((v,i)=>fixed[i]?fv[i]:v*k),r=ideal.map((v,i)=>fixed[i]?fv[i]:Math.max(unit[i],Math.round(v/unit[i])*unit[i]));
+  const members=g=>o.map((v,i)=>i).filter(i=>!fixed[i]&&grp[i]===g);
+  const groups=[...new Set(grp.filter((g,i)=>!fixed[i]))];
+  let diff=total-r.reduce((s,v,i)=>s+v*w[i],0),guard=60;
+  while(diff!==0&&guard--){const sgn=Math.sign(diff);const moves=[];
+    for(const g of groups){const ms=members(g);if(!ms.length)continue;const u=unit[ms[0]],step=ms.reduce((s,i)=>s+w[i]*u,0);if(step>Math.abs(diff))continue;
+      const err=ms.reduce((s,i)=>s+Math.abs(ideal[i]-(r[i]+sgn*u)),0)/ms.length;moves.push({ms,u,step,err})}
+    if(!moves.length){ /* nothing fits: a lone part may break its parity by one */
+      const ms=groups.map(members).filter(m=>m.length===1&&w[m[0]]===1).map(m=>m[0]).sort((a,b)=>o[b]-o[a]);if(!ms.length)return null;r[ms[0]]+=sgn;diff-=sgn;continue}
+    moves.sort((a,b)=>a.err-b.err);const m=moves[0];m.ms.forEach(i=>r[i]+=sgn*m.u);diff-=sgn*m.step}
+  if(r.some(v=>v<1))return null;return r}
+/* "Garter Rib pat (over a multiple of 10 sts plus 6)" -> {words:['garter','rib'],mult:10,plus:6} */
+function stitchDefs(lines){const out=[];
+  lines.forEach((l,i)=>{const m=l.text.match(/^\s*([A-Za-z][A-Za-z'’ -]{1,34}?)\s*(?:pat(?:t|tern)?|stitch|st)?\s*[:(]?\s*\(?\s*(?:worked\s+|over\s+(?:a\s+)?)?multiples?\s+of\s+(\d+)\s*(?:sts?|stitches)?\s*(?:,?\s*(?:plus|\+)\s*(\d+))?/i);
+    if(!m)return;const words=m[1].toLowerCase().split(/[^a-z]+/).filter(w=>w.length>=3&&!/^(?:pat|patt|pattern|stitch|the|and|for)$/.test(w));
+    if(words.length)out.push({words,mult:+m[2],plus:+(m[3]||0),i})});
+  return out}
+function defFor(text,defs){const t=' '+text.toLowerCase()+' ';let best=null;
+  for(const d of defs){const ok=d.words.every(w=>new RegExp('[^a-z]'+w.slice(0,Math.max(3,w.length-3))).test(t));if(ok&&(!best||d.words.length>best.words.length))best=d}
+  return best}
+function snapTo(ideal,def,parity){const m=def.mult,p=def.plus;if(m<2)return Math.round(ideal);
+  let best=null;for(let c=p+m*Math.max(1,Math.floor((ideal-p)/m)-1);c<=ideal+m;c+=m){if(c<m)continue;const e=Math.abs(c-ideal)+(parity!=null&&c%2!==parity?0.4:0);if(!best||e<best.e)best={c,e}}
+  return best?best.c:Math.round(ideal)}
+/* the countable pieces of a line, with how many rows each is worked on ("BO 8 sts at the beg of the next 2 rows") */
+function partsOf(L,sz){const out=[];
+  L.raw.forEach(x=>{if(x.k!=='st'&&x.k!=='co')return;const after=L.line.slice(x.off+x.len,x.off+x.len+70),before=L.line.slice(Math.max(0,x.off-40),x.off);
+    if(/\b(?:inc|dec)\w*\s*$/i.test(before))return; /* a change, not a part */
+    let m=1,mm;
+    if((mm=after.match(/^\s*(?:sts?|stitches)?\s*(?:at\s+(?:the\s+)?beg(?:inning)?\s+of\s+)?(?:the\s+)?next\s+(\d+)\s+(?:RS\s+|WS\s+)?rows?/i)))m=+mm[1];
+    else if((mm=after.match(/^\s*(?:sts?|stitches)?\s*(?:from\s+|at\s+)?(?:the\s+)?(?:next|last)\s+(\d+)\s+\w+\s+edges/i)))m=+mm[1];
+    else if(/^\s*(?:sts?|stitches)?\s*(?:from|at)\s+each\s+\w+\s+edge\s+twice/i.test(after))m=4;
+    else if(/^\s*(?:sts?|stitches)?\s*(?:from|at)\s+each\s+\w+\s+edge\b/i.test(after))m=2;
+    else if(/^\s*(?:sts?|stitches)?[^.;]{0,24}\btwice\b/i.test(after))m=2;
+    const role=(/cent(?:er|re)|neck/i.test(before)||/^\s*(?:marked\s+)?(?:sts?|stitches)?\s*(?:from\s+|at\s+)?(?:each\s+)?(?:neck|cent(?:er|re))/i.test(after))?'neck':(/\b(?:last|rem(?:aining)?)\b/i.test(before.slice(-16))||/^\s*(?:sts?|stitches)?\s*(?:from\s+|at\s+)?(?:the\s+)?last\b/i.test(after))?'last':'';
+    out.push({x,m,role,o:pickI(x.o,sz),span:false,bo:/\b(?:BO|bind\s+off|cast\s+off)\s*(?:[^\s\d]{0,12}\s+)?$/i.test(before)})});
+  /* spans the classifier left alone: "over center 46 sts", and edge stitches "K1 (edge st)" */
+  const re=new RegExp('(?:over|across)\\s+(?:the\\s+)?(?:cent(?:er|re)\\s+|next\\s+)?('+GROUP.source+')\\s*(?:sts?|stitches)\\b','gi');let mm;
+  while((mm=re.exec(L.line))){const off=mm.index+mm[0].indexOf(mm[1]);if(L.raw.some(x=>x.off===off))continue;const o=mm[1].match(/\d+(?:\.\d+)?/g).map(Number);
+    out.push({x:{o,n:o.slice(),k:'st',src:mm[1],off,len:mm[1].length,ord:false,total:false,every:false,more:false,virtual:true},m:1,role:'',o:pickI(o,sz),span:true})}
+  const re2=/(?:^|[,;:]\s*|\bend\s+)([KkPp])\s?([123])\b(?=\s*(?:\(edge[^)]*\)|,|;|\.|$))/g;
+  while((mm=re2.exec(L.line))){const off=mm.index+mm[0].lastIndexOf(mm[2]);if(L.raw.some(x=>x.off===off)||out.some(q=>q.x.off===off))continue;
+    out.push({x:{o:[+mm[2]],n:[+mm[2]],k:'st',src:mm[2],off,len:1,ord:false,total:false,every:false,more:false,virtual:true},m:1,role:'edge',o:+mm[2],span:false})}
+  out.sort((a,b)=>a.x.off-b.x.off);return out}
 /* One worked row: how many stitches each section gains (+) or loses (-). null when a token isn't understood. */
 function rowDeltas(text,nsec){
   let body=text.replace(ROWHEAD,'');
@@ -720,8 +795,64 @@ function convertAll(model,p){
         audit.part.runs.forEach((r,k)=>{const o=r.src.match(/\d+(?:\.\d+)?/g).map(Number);const n=o.length===1?[nAll[k][Math.min(sz,nAll[k].length-1)]]:o.map((v,j)=>nAll[k][j]);
           L.raw.push({o,n,k:'part',src:r.src,off:r.off,len:r.src.length,ord:false,total:false,every:false,more:false})});
         L.raw.sort((a,b)=>a.off-b.off)}}}};
+  const defs=stitchDefs(model.lines);
   const walk=(parsed,sep)=>{
-    let prev=null,pending=null,acc=null;
+    let prev=null,pending=null,acc=null,coL=null,secs={},activeDef=null,defLine=-9;
+    const j0=x=>Math.min(sz,x.o.length-1);
+    const setN=(x,v)=>{x.n=x.n.slice();x.n[j0(x)]=v};
+    /* a line whose counts add up to the running total (or to its own total) is rescaled as one */
+    const partition=(L,i,r)=>{
+      const own=partsOf(L,sz);if(!own.length)return false;
+      const Lp=i>0?parsed[i-1]:null;const prevParts=(Lp&&!Lp.skip&&!Lp.frozen&&!Lp.res&&!Lp.rep&&!model.lines[i-1].head&&!pieceStart(Lp))?partsOf(Lp,sz).filter(q=>!q.span&&q.role!=='edge'):[];
+      const po=prev?pickI(prev.o,sz):null;
+      const tryWith=(parts)=>{
+        if(parts.length<2)return null;const sum=parts.reduce((s,q)=>s+q.o*q.m,0);
+        if(prev&&sum===po&&parts.filter(q=>!q.span&&q.role!=='edge').length>=2)return{parts,target:pickI(prev.n,sz),ofTotal:false};
+        if(prev&&sum===po&&parts.some(q=>q.span)&&prev===coL)return{parts,target:pickI(prev.n,sz),ofTotal:false};
+        if(r&&parts.some(q=>q.x!==r)&&sum-(parts.find(q=>q.x===r)||{o:0}).o===pickI(r.o,sz))return{parts,target:pickI(r.n,sz),ofTotal:true};
+        return null};
+      let hit=tryWith(own)||(prevParts.length?tryWith(prevParts.concat(own)):null);if(!hit)return false;
+      const ps=hit.ofTotal?hit.parts.filter(q=>q.x!==r):hit.parts;
+      const o=ps.map(q=>q.o),w=ps.map(q=>q.m);
+      /* equal parts with the same role move together; parts already settled by an earlier split stay put */
+      const grp=ps.map((q,k)=>{const twin=ps.findIndex((z,m)=>m!==k&&z.o===q.o&&z.role===q.role);return twin>=0?q.role+':'+q.o:'i'+k});
+      const pre=ps.map(q=>{const v=secs[q.role+':'+q.o];return v!=null&&v>0&&q.o>=8?v:null});
+      const spanI=ps.findIndex(q=>q.span),def=spanI>=0?defFor(L.line,defs):null;
+      let sc;
+      if(def&&prev===coL){const edges=ps.reduce((s,q,k)=>s+(k===spanI?0:q.o*q.m),0),coN=pickI(prev.n,sz),ideal=ps[spanI].o*(coN/po);
+        const span=snapTo(ideal,def,ps[spanI].o%2);const newCo=span+edges;
+        sc=ps.map((q,k)=>k===spanI?span:q.o);
+        if(newCo!==coN){setN(coL.co,newCo);prev.n=prev.n.slice();prev.n[sz<prev.n.length?sz:prev.n.length-1]=newCo;
+          if(coL.L&&!coL.L.flag)coL.L.flag={note:true,text:`Gauge cast on ${newCo} rather than ${coN} so the ${def.words.map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')} (a multiple of ${def.mult}${def.plus?' plus '+def.plus:''}) fits between the edge stitches.`}}}
+      else{const bo=ps.map(q=>q.bo);sc=scaleWeighted(o,w,grp,hit.target,P.keepEven,spanI>=0?0:10,pre.every(v=>v==null)?null:pre,bo);
+        if(!sc&&pre.some(v=>v!=null))sc=scaleWeighted(o,w,grp,hit.target,P.keepEven,spanI>=0?0:10,null,bo)}
+      if(!sc)return false;
+      ps.forEach((q,k)=>{if(q.x.virtual){q.x.n=q.x.o.map(v=>v);q.x.n[j0(q.x)]=sc[k];if(sc[k]!==q.o){const host=own.includes(q)?L:Lp;host.raw.push(q.x)}}else setN(q.x,sc[k]);
+        if(q.o>=8&&!q.span){const key=q.role+':'+q.o;secs[key]=secs[key]!=null&&secs[key]!==sc[k]?-1:sc[k]}});
+      [L,Lp].forEach(h=>{if(!h)return;h.raw.sort((a,b)=>a.off-b.off);h.co=h.raw.find(x=>x.k==='co');h.res=h.raw.find(x=>x.k==='st'&&x.total)});
+      ps.forEach((q,k)=>{if(q.role!=='neck')return;for(let b=i-3;b<i;b++){const Q=parsed[b];if(!Q||Q.skip||Q===Lp)continue;Q.raw.forEach(x=>{if(x.k==='st'&&pickI(x.o,sz)===q.o&&/cent(?:er|re)/i.test(Q.line.slice(Math.max(0,x.off-20),x.off)))setN(x,sc[k])})}});
+      return true};
+    /* "BO 3 sts at the beg of the next N RS rows" then "dec 1 st ... on the next K RS rows — T sts": N and K are chosen to land on T */
+    const schedule=(L,i,r)=>{
+      const lines=[];for(let k=i;k>=Math.max(0,i-2);k--){const Q=parsed[k];if(!Q||Q.skip)continue;if(k<i&&(Q.res||model.lines[k].head))break;lines.push(Q)}
+      const items=[];
+      for(const Q of lines){const re=/\bBO\s+(\d+)\s*(?:sts?|stitches)?\s+at\s+(?:the\s+)?beg(?:inning)?\s+of\s+(?:the\s+)?next\s+/gi;let m;
+        while((m=re.exec(Q.line))){const sr=Q.raw.find(x=>x.k==='srow'&&x.off>=m.index+m[0].length-1&&x.off<=m.index+m[0].length+2);if(sr)items.push({Q,b:+m[1],sr,kind:'bo'})}
+        const d=Q.line.match(/\bdec\s+(\d+)\s*(?:sts?|stitches)?\b[^.;]{0,40}?\b(?:on|every)\s+(?:the\s+)?next\s+/i);
+        if(d){const at=d.index+d[0].length;const sr=Q.raw.find(x=>x.k==='srow'&&Math.abs(x.off-at)<=2);if(sr)items.push({Q,b:+d[1],sr,kind:'dec'})}}
+      if(!items.some(q=>q.kind==='bo'))return false;
+      const ro=pickI(r.o,sz),po=pickI(prev.o,sz),pn=pickI(prev.n,sz);
+      const removal=items.reduce((s,q)=>s+q.b*pickI(q.sr.o,sz),0);
+      let t=L.snap!=null?L.snap:propSt(ro,P);let R=pn-t;if(R<0)return false;
+      const bo=items.filter(q=>q.kind==='bo'),dec=items.find(q=>q.kind==='dec');
+      if(removal!==po-ro&&!L.flag)L.flag={note:true,text:`The pattern’s bind-offs and decreases here take ${po} to ${po-removal}, not the printed ${ro}. Gauge worked from ${ro}.`};
+      /* keep every bind-off size as written, spend the removal on rows, leave the remainder to single decreases */
+      const bsum=bo.reduce((s,q)=>s+q.b,0);let rowsEach=bsum?Math.floor((R-(dec?0:0))/bsum):0;
+      if(dec){const K=pickI(dec.sr.o,sz)*dec.b;if(bsum&&Number.isInteger((R-K)/bsum)&&(R-K)/bsum>=0)rowsEach=(R-K)/bsum}
+      let left=R-rowsEach*bsum;
+      bo.forEach(q=>setN(q.sr,rowsEach));
+      if(dec)setN(dec.sr,Math.floor(left/dec.b));else if(left){t+=left}
+      setN(r,t);return true};
     const addAcc=(L,upto)=>{L.raw.forEach(x=>{if(x.k!=='co'||(upto!=null&&x.off>upto))return;acc=acc||{o:[],n:[]};const n=Math.max(acc.o.length,x.o.length);
       for(let i=0;i<n;i++){acc.o[i]=(acc.o[i]||0)+pickI(x.o,i);acc.n[i]=(acc.n[i]||0)+pickI(x.n,i)}})};
     const expire=()=>{if(pending&&info.panelF[info.piece[pending.i]]){pending=null;return}
@@ -729,23 +860,44 @@ function convertAll(model,p){
     parsed.forEach((L,i)=>{
       if(L.skip)return;
       if(pending&&i-pending.i>2)expire();
-      const r=L.res;
+      let r=L.res;
       const recentInc=parsed.slice(Math.max(0,i-3),i).some(x=>/\b(?:inc|dec|kfb|m1[lrp]?|k2tog|ssk|yo)\b/i.test(x.line));
       L.times=(L.shapeSelf||(L.repRows&&recentInc))?L.timesAll:[];
-      if(pieceStart(L)){expire();prev={o:L.co.o,n:L.co.n};acc=null}
+      if(pieceStart(L)){expire();prev={o:L.co.o,n:L.co.n};acc=null;coL=prev;coL.co=L.co;coL.L=L;secs={}}
       else addAcc(L,r?r.off:null);
+      /* which stitch pattern is in play, for its multiple */
+      if(model.lines[i]&&model.lines[i].head)activeDef=null;
+      {const d=defFor(L.line,defs);if(d&&!/multiple/i.test(L.line)){activeDef=d;defLine=i;L.namesDef=true}}
+      if(r&&activeDef&&!L.frozen&&(L.namesDef||(i-defLine===1&&/:\s*$/.test(parsed[defLine].line)))){const me=Math.min(sz,r.o.length-1);L.snap=snapTo(r.o[me]*(L.P||P).rs,activeDef,r.o[me]%2)}
+      /* a count that names a section already split off ("sl rem 78 sts for Back"), or restates the running count ("over 156 sts") */
+      if(prev&&!L.frozen){const po=pickI(prev.o,sz);const look=(v,role)=>{if(v===po)return pickI(prev.n,sz);if(v<10)return null;for(const k of [role+':'+v,':'+v]){if(secs[k]>0)return secs[k]}return null};
+        partsOf(L,sz).forEach(q=>{const x=q.x;if(x.virtual||x.total||x.k!=='st'||q.role==='neck'||q.role==='edge')return;const before=L.line.slice(Math.max(0,x.off-24),x.off);if(!/\b(?:sl(?:ip)?|over|across|rem(?:aining)?|on)\s+(?:the\s+)?(?:rem(?:aining)?\s+|next\s+)?$/i.test(before))return;const nv=look(q.o,q.role);if(nv==null)return;
+          setN(x,nv);if(q.o!==po&&!L.res){x.total=true;L.res=x}});
+        const re=new RegExp('(?:over|across|sl(?:ip)?|rem(?:aining)?|on)\\s+(?:the\\s+)?(?:cent(?:er|re)\\s+|next\\s+|rem(?:aining)?\\s+)?('+GROUP.source+')\\s*(?:sts?|stitches)\\b','gi');let mm;
+        while((mm=re.exec(L.line))){const off=mm.index+mm[0].indexOf(mm[1]);if(L.raw.some(x=>x.off===off))continue;const o=mm[1].match(/\d+(?:\.\d+)?/g).map(Number),v=pickI(o,sz);
+          if(/cent(?:er|re)|neck/i.test(L.line.slice(Math.max(0,off-30),off)))continue;const nv=look(v,'');if(nv==null)continue;
+          const x={o,n:o.map(q=>convNum(q,'st',L.P||P)),k:'st',src:mm[1],off,len:mm[1].length,ord:false,total:v!==po,every:false,more:false};x.n[Math.min(sz,o.length-1)]=nv;
+          L.raw.push(x);L.raw.sort((a,b)=>a.off-b.off);if(v!==po&&!L.res)L.res=x}}
+      r=L.res;
+      L.inRound=parsed.slice(Math.max(0,i-12),i+1).some(q=>!q.skip&&/\b(?:in the round|in the rnd|rnds?\b|rounds?\b|circular needle|join(?:ed)?\b.*\bround)/i.test(q.line))&&!parsed.slice(Math.max(0,i-12),i+1).some(q=>!q.skip&&/\b(?:RS|WS)\s+rows?\b|\bback and forth\b|\bflat\b/i.test(q.line));
       if(sep&&i===sep.i&&r){expire();pending=null;
         const j=Math.min(sz,r.n.length-1);r.n=r.o.map(n=>convNum(n,'st',L.P||P));r.n[j]=sep.sleeveN;
         const b=L.raw.find(x=>x.k==='st'&&x.total&&x!==r);if(b){const jb=Math.min(sz,b.n.length-1);b.n=b.o.map(n=>convNum(n,'st',L.P||P));b.n[jb]=sep.bodyN}}
-      else if(L.rep){expire();resolveRep(L,r,prev,L.P||P,sz);if(!r&&prev&&!L.rep.times&&!/\bto\s+(?:\d+\s+sts?\s+before\s+)?(?:marker|m\b|bor\b|end\b|last\b)/i.test(L.rep.body)&&/\b(?:k2tog|ssk|p2tog|k3tog|sk2p|s2kp|cdd|m1|kfb|yo|dec|inc)/i.test(L.line))pending={i,L,type:'rep'}}
+      else if(L.rep){expire();resolveRep(L,r,prev,L.P||P,sz);const cn=consumption(L.rep.body);if(!r&&prev&&!L.rep.times&&!(cn&&cn.c===cn.prod)&&!/\bto\s+(?:\d+\s+sts?\s+before\s+)?(?:marker|m\b|bor\b|end\b|last\b)/i.test(L.rep.body)&&/\b(?:k2tog|ssk|p2tog|k3tog|sk2p|s2kp|cdd|m1|kfb|yo|dec|inc)/i.test(L.line))pending={i,L,type:'rep'}}
       else if(L.times.length){expire();if(r||L.times.length>1)resolveShaping(L,r,prev,L.P||P,sz);else pending={i,L,type:'shape'}}
       else if(r&&pending){const q=pending;pending=null;if(q.type==='rep')resolveRep(q.L,r,prev,L.P||P,sz);else resolveShaping(q.L,r,prev,L.P||P,sz)}
-      else if(r&&prev)resolveResidual(L,r,prev,L.P||P,acc);
+      else if(r&&prev)resolveResidual(L,r,prev,L.P||P,acc,sz);
+      else if(!r&&L.res&&prev){/* linked count: already set */}
+      /* joint rescale of a line that splits the count, then schedules that must land on a printed total */
+      if(prev&&!L.frozen&&!L.rep){const R=L.res;const didPart=partition(L,i,R);
+        if(!didPart)partsOf(L,sz).forEach(q=>{const x=q.x;if(x.k!=='st'||x.total||x.virtual||q.o<8)return;const v=secs[q.role+':'+q.o];if(v==null||v<0)return;setN(x,v)});
+        if(!didPart&&R&&pickI(R.o,sz)!==pickI(prev.o,sz)&&secs[':'+pickI(R.o,sz)]>0&&pickI(R.o,sz)>=10)setN(R,secs[':'+pickI(R.o,sz)]);
+        else if(!didPart&&R&&!L.times.length&&pickI(R.o,sz)!==pickI(prev.o,sz))schedule(L,i,R)}
       if(L.raw!==undefined&&!L.skip&&!L.frozen&&prev&&info.panelF[info.piece[i]]&&panelMentions(L.line)>=2&&!L.flag){
         const d=pickI(prev.n,sz)-pickI(prev.o,sz);
         if(d){const a=Math.abs(d),h=Math.floor(a/2),word=d>0?'extra':'fewer';
           L.flag={note:true,text:`Gauge kept the cable panels as written and ${d>0?'widened':'narrowed'} this piece by ${a} stitch${a>1?'es':''}. Work ${h===a-h?`${h} ${word} plain stitch${h>1?'es':''} at each side edge`:`${h} ${word} plain stitch${h===1?'':'es'} at one side edge and ${a-h} at the other`}, outside the panels.`}}}
-      if(r){prev={o:r.o,n:r.n};acc=null}
+      if(L.res){prev={o:L.res.o,n:L.res.n};acc=null}
       L.after=prev});
     expire();return parsed};
   let parsed=parseAll();applyAudit(parsed);walk(parsed,null);
