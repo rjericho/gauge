@@ -165,17 +165,19 @@ textarea:focus{outline:none;border-color:var(--rule)}
 .ov .nv{position:absolute;display:flex;align-items:center;justify-content:flex-start;background:var(--sheet-green);color:var(--sheet-ink);font-family:var(--sans);font-weight:700;white-space:nowrap;padding:0 .3em;line-height:1;border-radius:3px;font-variant-numeric:tabular-nums;pointer-events:none;letter-spacing:-.01em}
 .ov .nv .o{opacity:.5;font-weight:500}
 .ov .fl{position:absolute;left:5px;width:8px;height:8px;border-radius:50%;background:var(--sheet-flag);pointer-events:none}
+.ov .fl.note{background:var(--sheet-green)}
 .pages.orig .nv{display:none}
 .pload{position:absolute;inset:0;display:grid;place-items:center;color:#5E7A6A;font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
 .banner{font-size:14px;color:var(--mute);margin:0 0 12px;display:flex;gap:8px;align-items:baseline}
 .banner i{width:8px;height:8px;border-radius:50%;background:var(--flag);display:inline-block;flex:none;transform:translateY(-1px)}
-.tl{display:grid;gap:2px}
-.ln{display:block;width:100%;padding:9px 12px;border-radius:10px;font-size:17px;line-height:1.5;overflow-wrap:anywhere;color:inherit}
+.banner.note i{background:var(--green)}
+.tl{display:grid;grid-template-columns:minmax(0,1fr);gap:2px}
+.ln{display:block;width:100%;min-width:0;padding:9px 12px;border-radius:10px;font-size:17px;line-height:1.5;overflow-wrap:anywhere;color:inherit}
 .ln.head{font-family:var(--serif);font-size:24px;line-height:1.1;padding-top:24px}
 .ln.done{color:var(--faint)}
 .ln.cur{background:var(--wash)}
 .pgsep{margin:20px 0 4px 12px}
-.mk{background:var(--green);color:var(--on-green);font-weight:700;padding:0 5px;border-radius:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mk{background:var(--green);color:var(--on-green);font-weight:700;padding:0 5px;border-radius:4px;font-variant-numeric:tabular-nums;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .mk .o{opacity:.55;font-weight:500}
 .mk s{color:var(--on-green);opacity:.6;font-weight:400;margin-left:5px;font-size:.85em}
 .ln.done .mk{opacity:.55}
@@ -295,14 +297,19 @@ function joinLines(lines){
   const out=[];const colW={};
   lines.forEach(l=>{const k=l.page+':'+l.col;colW[k]=Math.max(colW[k]||0,l.x1-l.x0)});
   const startsNew=t=>/^\s*(?:[•●▪◦]|(?:set-?up\s+)?(?:rows?|rnds?|rounds?|step)\s*\d|[A-Z][A-Za-z #\/-]{0,30}:\s)/i.test(t);
+  const foot=t=>/©|copyright|all rights reserved|^\s*page\s+\d+\s*$|thank you for downloading|www\.|\.com\b/i.test(t);
   for(const l of lines){
-    const prev=out[out.length-1];
+    /* running footers sit between a sentence and its continuation; look past them */
+    let k=out.length-1,prev=out[k];while(prev&&prev.foot&&k>0)prev=out[--k];
+    l.foot=foot(l.text);
     let join=false;
-    if(prev&&prev.page===l.page&&prev.col===l.col&&!prev.head&&!l.head&&!startsNew(l.text)){
-      const gap=l.y-prev.lastY,lastW=prev.lastW,full=colW[l.page+':'+l.col]||lastW;
+    if(prev&&prev.page===l.page&&!prev.head&&!l.head&&!l.foot&&!startsNew(l.text)){
+      const lastW=prev.lastW,full=colW[prev.page+':'+prev.col]||lastW;
       const ended=/[.!?:]["”’)]*\s*$/.test(prev.text)&&(!/\b(?:sts?|approx|incl|rnd|rep|patt?|beg|foll|cont)\.\s*$/i.test(prev.text)||/^[A-Z]/.test(l.text));
       const open=/(?:[,(\[]|--|\band|\bor)\s*$/i.test(prev.text);
-      join=gap>0&&gap<prev.lastH*1.9&&(open||(lastW>full*0.72&&!ended))}
+      if(prev.col===l.col){const gap=l.y-prev.lastY;join=gap>0&&gap<prev.lastH*1.9&&(open||(lastW>full*0.72&&!ended))}
+      /* a sentence that runs off the bottom of one column continues at the top of the next */
+      else if(l.col===prev.col+1)join=/^[a-z]/.test(l.text)&&!ended&&(open||lastW>full*0.72)}
     if(join){
       const hy=/[A-Za-z]\s*-$/.test(prev.text)&&/^[a-z]/.test(l.text);
       if(hy)prev.text=prev.text.replace(/\s*-$/,'');
@@ -397,7 +404,7 @@ function classify(before,after){
   if(/^\s*(?:more\s+)?(?:sts?|stitches)\b/i.test(after)){
     if(/(?:\blast|\bfirst|\b(?:over|across)\s+(?:the\s+)?(?:next|center|centre|middle)?)\s*$/i.test(before))return null;
     return'st'}
-  if(/^\s*(?:rows?|rnds?|rounds?)\b/i.test(after)){
+  if(/^\s*(?:more\s+)?(?:rows?|rnds?|rounds?)\b/i.test(after)){
     if(/\b(?:last|these|first|next|following|of|the)\s*$/i.test(before))return null;
     if(/^\s*(?:rows?|rnds?|rounds?)\s+(?:of|from)\s+(?:the\s+)?(?:chart|patt|pattern|rep|repeat|stripe|sequence|lace|cable|motif)/i.test(after))return null;
     return'row'}
@@ -503,11 +510,14 @@ function resolveRep(L,r,prev,P,sz){
 function resolveShaping(L,r,prev,P,sz){
   if(L.times.length>1){L.flag={text:'Two-stage shaping. Only the start and end counts are rewritten here, so work out the decrease rows by hand.'};return}
   if(!r)return;
-  const t=L.times[0],ev=L.every[0],n=r.o.length,perLine=inferPer(L.line);
+  const t=L.times[0],ev=L.every[0],n=r.o.length,perLine=L.per||inferPer(L.line);
   r.n=r.o.map((ro,i)=>{const me=i===Math.min(sz,n-1),jt=jFor(t.o,n,i,sz),to=pickI(t.o,jt)+(t.more?1:0);
     let po,pn,per=null;
+    /* the count didn't move: this size doesn't work the repeat (an X in the size run, or 0 times) */
+    if(prev&&pickI(prev.o,i)===ro){if(ev&&(ev.o.length===n||me)){const je=jFor(ev.o,n,i,sz);ev.n[je]=ev.o[je]}return pickI(prev.n,i)}
     if(to<=0||(t.more&&pickI(t.o,jt)===0&&!prev)){if(ev&&(ev.o.length===n||me)){const je=jFor(ev.o,n,i,sz);ev.n[je]=ev.o[je]}return prev&&pickI(prev.o,i)===ro?pickI(prev.n,i):propSt(ro,P)}
-    if(to>0&&perLine){per=perLine;po=ro+per*to;pn=(prev&&pickI(prev.o,i)===po)?pickI(prev.n,i):propSt(po,P)}
+    if(to>0&&perLine){per=perLine;po=ro+per*to;
+      pn=(prev&&pickI(prev.o,i)===po)?pickI(prev.n,i):propSt(po,P)}
     else if(to>0&&prev){po=pickI(prev.o,i);pn=pickI(prev.n,i);per=(po-ro)/to;if(!Number.isInteger(per)||per===0)per=null}
     if(!per){if(me)L.flag={text:'This shaping depends on a stitch count the app couldn’t read. Check the rows and repeats by hand.'};return propSt(ro,P)}
     let nr=Math.round((pn-ro*P.rs)/per);if(nr<1)nr=1;
@@ -544,44 +554,207 @@ function sectionInfo(lines){
     if(defStart.test(t))def=true;
     else if(pieceHead.test(t)||(l.head&&!defStart.test(t))||sizeRun(t))def=false;
     if(!def&&(pieceHead.test(t)||l.head))pc++;
-    frozen[i]=def||abbr.test(t);piece[i]=pc;
+    frozen[i]=def||abbr.test(t)||/^\s*[A-Za-z][\w&\/'’-]{0,9}\s*=\s*[A-Za-z(]/.test(t);piece[i]=pc;
     if(!frozen[i]){let m;const re=new RegExp(PANEL_RE.source,'gi');let sum=0;while((m=re.exec(t)))sum+=+(m[1]||m[2]);if(sum)panelF[pc]=(panelF[pc]||0)+sum}});
   const back=Math.max(0,...Object.values(panelF));
   lines.forEach((l,i)=>{if(!panelF[piece[i]]&&back&&/\b(?:as\s+(?:for|on)\s+(?:the\s+)?back|same\s+as\s+(?:the\s+)?back)\b/i.test(l.text))panelF[piece[i]]=back});
   return{frozen,piece,panelF}}
+/* ---------- raglan sections ----------
+   A top-down yoke tells the knitter where to put her markers, then grows each section by a fixed
+   number of stitches per round. Gauge reads the marker row, rescales it to the new cast-on, and
+   follows every increase round section by section, so the sleeve and body counts at the split are
+   the stitches actually on her needle rather than an estimate. Nothing from here is used unless the
+   same reading reproduces the pattern's own printed totals for the original size. */
+const ROWHEAD=/^\s*(?:set-?up\s+)?(?:rows?|rnds?|rounds?)\s*\d+\s*(?:\([^)]*\))?\s*:\s*/i;
+const REPLAST=/rep(?:eat)?\s+(?:the\s+)?last\s+(\d+)\s+(?:rows?|rnds?|rounds?)/i;
+const SEPARATE=/\bseparat(?:e|ing|ion)\b|\bdivid(?:e|ing)\b|waste\s+yarn|scrap\s+yarn|on\s+hold|holders?\b/i;
+function sizeVal(run,sz){const v=run.match(/\d+(?:\.\d+)?/g).map(Number);return v[Math.min(sz,v.length-1)]}
+/* "p1, pm, p 7, pm, p 32, pm, p 7, pm, p1" -> [1,7,32,7,1] (chosen size) plus where each run sits in the text. null if it isn't one. */
+function partitionOf(text,co,sz){
+  let body=text;const ci=text.lastIndexOf(':');if(ci>=0&&/marker|pm\b|as follows/i.test(text.slice(0,ci)))body=text.slice(ci+1);
+  const base=text.length-body.length;
+  /* hide the size runs so their commas don't split the row */
+  const runs=[];const prot=body.replace(new RegExp(GROUP.source,'g'),(m,off)=>{runs.push({src:m,off:base+off});return '\u0001'+(runs.length-1)+'\u0001'});
+  const parts=[],used=[];let needSep=false,seps=0;
+  for(const tok0 of prot.split(/[,;]/)){const t=tok0.trim();if(!t)continue;
+    const m=t.match(/^(?:k|p|knit|purl)\s*\u0001(\d+)\u0001\.?\s*(pm|place\s+(?:a\s+)?marker)?\.?$/i);
+    if(m){if(needSep)return null;const r=runs[+m[1]];parts.push(sizeVal(r.src,sz));used.push(r);needSep=true;if(m[2]){needSep=false;seps++}continue}
+    if(/^(?:pm|place\s+(?:a\s+)?marker)(?:\s+for\s+\w+)?\.?$/i.test(t)){if(!needSep)return null;needSep=false;seps++;continue}
+    if(/^(?:slipping|sl(?:ip)?\s+markers?)/i.test(t))continue;
+    return null}
+  if(parts.length<3||seps<parts.length-1||parts.reduce((s,v)=>s+v,0)!==co)return null;
+  return{parts,runs:used}}
+/* Share a new total across sections in the old proportions. Sections of 3 or fewer stay; mirrored pairs stay equal;
+   an even section stays even (so a sleeve that ends in k1, p1 rib still can). */
+function scaleParts(o,total,keepEven){const n=o.length,fixed=o.map(v=>v<=3);
+  const sumF=o.reduce((s,v,i)=>s+(fixed[i]?v:0),0),sumR=o.reduce((s,v,i)=>s+(fixed[i]?0:v),0);
+  if(sumR<=0||total-sumF<=0)return null;const k=(total-sumF)/sumR;
+  const unit=o.map(v=>keepEven&&v%2===0?2:1);
+  const ideal=o.map((v,i)=>fixed[i]?v:v*k),r=ideal.map((v,i)=>fixed[i]?v:Math.max(unit[i],Math.round(v/unit[i])*unit[i]));
+  const pairOf=i=>{const j=n-1-i;return j!==i&&o[j]===o[i]?j:-1};
+  let diff=total-r.reduce((s,v)=>s+v,0),guard=40;
+  while(diff!==0&&guard--){const sgn=Math.sign(diff);
+    /* every legal move, smallest error after the move first */
+    const moves=[];o.forEach((v,i)=>{if(fixed[i])return;const j=pairOf(i);if(j>=0&&j<i)return;
+      const step=unit[i]*(j>=0?2:1);if(step>Math.abs(diff))return;
+      const err=Math.abs(ideal[i]-(r[i]+sgn*unit[i]))*(j>=0?2:1);moves.push({i,j,step,err})});
+    if(!moves.length){ /* nothing fits: nudge the biggest unpaired section by one and accept the odd count */
+      const i=o.map((v,i)=>i).filter(i=>!fixed[i]&&pairOf(i)<0).sort((a,b)=>o[b]-o[a])[0];if(i===undefined)return null;r[i]+=sgn;diff-=sgn;continue}
+    moves.sort((a,b)=>a.err-b.err);const m=moves[0];r[m.i]+=sgn*unit[m.i];if(m.j>=0)r[m.j]+=sgn*unit[m.i];diff-=sgn*m.step}
+  if(r.some(v=>v<1))return null;return r}
+/* One worked row: how many stitches each section gains (+) or loses (-). null when a token isn't understood. */
+function rowDeltas(text,nsec){
+  let body=text.replace(ROWHEAD,'');
+  const noteM=body.match(/\(\s*(\d+)\s*(?:sts?|stitches)\s*(inc|dec)\w*\.?\s*\)/i);const note=noteM?(noteM[2].toLowerCase()==='dec'?-1:1)*+noteM[1]:null;
+  body=body.replace(/\([^)]*\)/g,' ').replace(new RegExp('(?:--\\s*)?'+GROUP.source+'\\s*(?:sts?|stitches)\\b[^,;]*$','i'),'').replace(/\s+/g,' ').replace(/\.\s*$/,'').trim();
+  const d=new Array(nsec).fill(0),last=nsec-1;let cur=0;
+  const apply=tok=>{const t=tok.trim().replace(/\.$/,'').toLowerCase();if(!t)return true;
+    if(/^(?:k|p|knit|purl)\s*\d*$/.test(t))return true;
+    if(/^(?:k|p|knit|purl)\s+(?:all\s+)?(?:sts?|stitches|all|across|even)\b/.test(t))return true;
+    if(/^(?:work|knit|purl)\s+(?:all\s+)?(?:sts?|stitches)?\s*(?:as\s+(?:they\s+)?(?:face|appear|present)|in\s+patt?)/.test(t))return true;
+    if(/^(?:k|p|knit|purl)\s+(?:to|until)\s+(?:(\d+)\s+(?:sts?|stitches?)\s+before\s+)?(?:the\s+)?(?:next\s+)?(?:m|mkr|marker)$/.test(t))return true;
+    if(/^(?:k|p|knit|purl)\s+(?:to|until)\s+(?:the\s+)?(?:end(?:\s+of\s+(?:rnd|round|row))?|last\s+(?:st|stitch)|last\s+\d+\s+(?:sts?|stitches))$/.test(t)){cur=last;return true}
+    if(/^(?:sm|sl\s*m|slip\s+(?:m|marker)|sl\s+marker|slip\s+next\s+marker)$/.test(t)){cur=cur>=last?0:cur+1;return true} /* past the last marker is the start of the round again */
+    if(/^(?:slipping|sl(?:ip)?(?:ping)?\s+(?:all\s+)?markers?)\b/.test(t))return true;
+    if(/^(?:kfb|pfb|kf&b|k1fb|m1|m1l|m1r|m1p|m1pl|m1pr|m1k|yo|inc\s*1|inc)$/.test(t)){d[cur]+=1;return true}
+    if(/^kfbf$/.test(t)){d[cur]+=2;return true}
+    if(/^(?:k2tog|ssk|p2tog|ssp|skp|skpo|dec\s*1|dec)$/.test(t)){d[cur]-=1;return true}
+    if(/^(?:k3tog|sk2p|s2kp2?|cdd|sssk)$/.test(t)){d[cur]-=2;return true}
+    return false};
+  const toks=s=>s.split(/\s*[,;]\s*/);
+  const star=body.match(/^(.*?)\*\s*(.+?)\s*[;,]?\s*rep(?:eat)?\s+from\s*\*\s*(.*)$/i);
+  if(star){
+    for(const t of toks(star[1]))if(!apply(t))return null;
+    const post=star[3];let m,count=null,untilLast=false;
+    if((m=post.match(/^(\d+)\s+(?:more\s+times?|times?\s+more)/i)))count=+m[1]+1;
+    else if((m=post.match(/^(\d+)\s+times?/i)))count=+m[1];
+    else if((m=post.match(/^once\s+more/i)))count=2;
+    else if((m=post.match(/^twice(?:\s+more)?/i)))count=/more/i.test(m[0])?3:2;
+    else if((m=post.match(/^(?:to|until)\s+(?:the\s+)?(?:last\s+marker|end(?:\s+of\s+(?:rnd|round|row))?)/i)))untilLast=true;
+    else return null;
+    const rest=post.slice(m[0].length).replace(/^\s*[,;.]\s*/,'');
+    const bodyToks=toks(star[2]);if(!bodyToks.some(t=>/^(?:sm|sl\s*m|slip\s+(?:m|marker)|sl\s+marker)$/i.test(t.trim()))&&untilLast)return null;
+    let passes=0;
+    while(untilLast?cur<last:passes<count){for(const t of bodyToks)if(!apply(t))return null;if(++passes>60)return null}
+    for(const t of toks(rest))if(!apply(t))return null}
+  else for(const t of toks(body))if(!apply(t))return null;
+  const sum=d.reduce((s,v)=>s+v,0);if(note!==null&&note!==sum)return null;
+  return d}
+/* Follow the yoke for one size. mode 'audit' uses only what the pattern prints; 'full' also carries the converted counts. */
+function trackYoke(parsed,sz,info,mode,P){
+  const out={fix:{},notes:{},per:{},part:null,sep:null};
+  let coLine=-1,Y=null,block=[],pendRep=null,under=null,inSep=false,mismatch=null,checks=0;
+  const sum=a=>a.reduce((s,v)=>s+v,0),val=(x,arr)=>pickI(arr,sz);
+  const stop=()=>{Y=null};
+  const pieceStart=L=>{const t=L.line;return!!L.co&&!/backward loop|on your right needle|at the underarm|more sts|repeat from|\bjoin/i.test(t)&&(/^\s*(?:with\b[^.]{0,60}?,\s*)?(?:cast\s+on|co)\b/i.test(t)||L.co.o[0]>8)};
+  for(let i=0;i<parsed.length;i++){const L=parsed[i];if(L.skip||L.frozen)continue;
+    if(pieceStart(L)){Y=null;coLine=i;if(out.sep)break;continue}
+    if(!Y){ if(coLine>=0&&i-coLine<=3&&!info.panelF[info.piece[i]]){const co=parsed[coLine].co;const pt=partitionOf(L.line,val(0,co.o),sz);
+        if(pt){const n=mode==='full'?scaleParts(pt.parts,val(0,co.n),P.keepEven):pt.parts.slice();if(!n)continue;
+          Y={o:pt.parts.slice(),n};block=[];pendRep=null;under=null;inSep=false;mismatch=null;checks=0;out.part={i,runs:pt.runs,o:pt.parts,n}}}
+      continue}
+    const r=L.res,nsec=Y.o.length,last=nsec-1;
+    if(SEPARATE.test(L.line)&&!ROWHEAD.test(L.line))inSep=true;
+    if(!ROWHEAD.test(L.line)&&!L.repRows&&!L.co&&!r&&/\b(?:kfb|m1[lrp]?|k2tog|ssk|yo|inc|dec)\s*\d*\b/i.test(L.line)&&!/^\s*(?:inc|dec)\w*\s+[A-Z]\b/.test(L.line.trim())){stop();continue}
+    /* a worked row */
+    if(ROWHEAD.test(L.line)){const d=rowDeltas(L.line,nsec);if(!d){stop();continue}block.push(d);
+      if(!r)continue}
+    /* stitches cast on mid-yoke: at the neck join they go onto the end of the row; at the underarm they belong to the body */
+    if(L.co&&!ROWHEAD.test(L.line)){const o=val(0,L.co.o),n=val(0,L.co.n);
+      if(inSep||/underarm/i.test(L.line)){under={o,n,m:/repeat from|each|both/i.test(L.line)?2:1}}
+      else{Y.o[last]+=o;if(mode==='full')Y.n[last]+=n}}
+    const rep=L.repRows&&REPLAST.test(L.line)?+L.line.match(REPLAST)[1]:0;
+    const times=L.repRows?(L.times&&L.times.length?L.times[0]:L.timesAll[0]):null;
+    if(rep&&!times){stop();continue}
+    if(rep&&times){pendRep={K:rep,t:times,i};if(!r)continue}
+    if(!r)continue;
+    /* a checkpoint: a printed total */
+    const ro=val(0,r.o);const prevTotal=sum(Y.o);
+    const sleeveTot=L.raw.find(x=>x.k==='st'&&x.total&&/sleeve/i.test(L.line.slice(Math.max(0,x.off-40),x.off)));
+    const bodyTot=L.raw.find(x=>x.k==='st'&&x.total&&/body/i.test(L.line.slice(Math.max(0,x.off-40),x.off)));
+    if(sleeveTot&&bodyTot){under=under||{o:0,n:0,m:0};
+      const so=val(0,sleeveTot.o),idx=Y.o.map((v,k)=>v===so?k:-1).filter(k=>k>=0);
+      if(idx.length!==2||checks<2||mismatch){stop();continue}
+      const others=k=>!idx.includes(k);const bo=sum(Y.o.filter((v,k)=>others(k)))+under.m*under.o,bp=val(0,bodyTot.o);
+      out.sep={i,sleeveIdx:idx,sleeveO:so,bodyO:bo,sleeveN:mode==='full'?Y.n[idx[0]]:null,bodyN:mode==='full'?sum(Y.n.filter((v,k)=>others(k)))+under.m*under.n:null,
+        sections:{o:Y.o.slice(),n:Y.n.slice()}};
+      if(bp!==bo){out.fix[i]=out.fix[i]||{};out.fix[i][bodyTot.off]=bo;out.notes[i]=`The pattern prints ${bp} body stitches here, but its own instructions make ${bo} (${sum(Y.o.filter((v,k)=>others(k)))} on the needle plus ${under.m} × ${under.o} cast on at the underarms). Gauge worked from ${bo}.`}
+      Y=null;continue}
+    /* apply what was worked since the last checkpoint */
+    let passesO=1,passesN=1,K=0;
+    if(pendRep){K=pendRep.K;if(K>block.length){stop();continue}
+      const t=pendRep.t,jt=jFor(t.o,r.o.length,Math.min(sz,r.o.length-1),sz);
+      passesO=ro===prevTotal?0:pickI(t.o,jt)+(t.more?1:0);
+      passesN=ro===prevTotal?0:(mode==='full'?(t.n[jt]!==undefined?t.n[jt]:pickI(t.o,jt))+(t.more?1:0):passesO);
+      if(mode==='audit')out.per[pendRep.i]=-sum(block.slice(block.length-K).map(sum))}
+    block.forEach((d,k)=>{const reps=k<block.length-K?1:(K?passesO:1),repsN=k<block.length-K?1:(K?passesN:1);
+      d.forEach((v,s)=>{Y.o[s]+=v*reps;if(mode==='full')Y.n[s]+=v*repsN})});
+    block=[];pendRep=null;
+    const T=sum(Y.o);
+    if(T===ro){checks++;if(mismatch){out.fix[mismatch.i]=out.fix[mismatch.i]||{};out.fix[mismatch.i][mismatch.off]=mismatch.T;
+        out.notes[mismatch.i]=`The pattern prints ${mismatch.ro} sts here, but its own instructions make ${mismatch.T} (${mismatch.from} + ${mismatch.T-mismatch.from}). The next total, ${ro}, only works from ${mismatch.T}, so Gauge worked from ${mismatch.T}.`;mismatch=null}}
+    else{if(mismatch){stop();continue}mismatch={i,off:r.off,T,ro,from:prevTotal}}}
+  if(mode==='audit')delete out.sep;
+  return out}
 /* Walks the pattern top to bottom, carrying the live stitch count forward the way a knitter does. */
 function convertAll(model,p){
-  const P=params(p),sz=p.size||0;let sect='';
+  const P=params(p),sz=p.size||0;
   const info=sectionInfo(model.lines);
-  const parsed=model.lines.map((l,i)=>{const t=l.text.trim();if(l.head||(t.length<40&&/^[A-Z][A-Z0-9 &'’:\-]+$/.test(t)&&/[A-Z]{3}/.test(t)))sect=t;
+  const parseAll=()=>{let sect='';return model.lines.map((l,i)=>{const t=l.text.trim();if(l.head||(t.length<40&&/^[A-Z][A-Z0-9 &'’:\-]+$/.test(t)&&/[A-Z]{3}/.test(t)))sect=t;
     if(info.frozen[i])return{line:l.text,raw:[],skip:true,flag:null,times:[],every:[],frozen:true};
     const F=info.panelF[info.piece[i]]||0;
-    return parseLine(l.text,Object.assign({},P,{dLen:/sleeve|cuff|arm\b/i.test(sect)?P.dSleeve:P.dBody,panelF:F,panelSetup:F>0&&panelMentions(l.text)>=2}))});
-  let prev=null,pending=null,acc=null;
+    return parseLine(l.text,Object.assign({},P,{dLen:/sleeve|cuff|arm\b/i.test(sect)?P.dSleeve:P.dBody,panelF:F,panelSetup:F>0&&panelMentions(l.text)>=2}))})};
   const pieceStart=L=>{const t=L.line;return!!L.co&&!/backward loop|on your right needle|at the underarm|more sts|repeat from|\bjoin/i.test(t)&&(/^\s*(?:with\b[^.]{0,60}?,\s*)?(?:cast\s+on|co)\b/i.test(t)||L.co.o[0]>8)};
-  const addAcc=(L,upto)=>{L.raw.forEach(x=>{if(x.k!=='co'||(upto!=null&&x.off>upto))return;acc=acc||{o:[],n:[]};const n=Math.max(acc.o.length,x.o.length);
-    for(let i=0;i<n;i++){acc.o[i]=(acc.o[i]||0)+pickI(x.o,i);acc.n[i]=(acc.n[i]||0)+pickI(x.n,i)}})};
-  const expire=()=>{if(pending&&info.panelF[info.piece[pending.i]]){pending=null;return}
-    if(pending){pending.L.flag=pending.L.flag||{text:'This line’s numbers depend on a stitch count the app couldn’t find nearby. Check it by hand.'};pending=null}};
-  parsed.forEach((L,i)=>{
-    if(L.skip)return;
-    if(pending&&i-pending.i>2)expire();
-    const r=L.res;
-    const recentInc=parsed.slice(Math.max(0,i-3),i).some(x=>/\b(?:inc|dec|kfb|m1[lrp]?|k2tog|ssk|yo)\b/i.test(x.line));
-    L.times=(L.shapeSelf||(L.repRows&&recentInc))?L.timesAll:[];
-    if(pieceStart(L)){expire();prev={o:L.co.o,n:L.co.n};acc=null}
-    else addAcc(L,r?r.off:null);
-    if(L.rep){expire();resolveRep(L,r,prev,L.P||P,sz);if(!r&&prev&&!L.rep.times&&!/\bto\s+(?:\d+\s+sts?\s+before\s+)?(?:marker|m\b|bor\b|end\b|last\b)/i.test(L.rep.body)&&/\b(?:k2tog|ssk|p2tog|k3tog|sk2p|s2kp|cdd|m1|kfb|yo|dec|inc)/i.test(L.line))pending={i,L,type:'rep'}}
-    else if(L.times.length){expire();if(r||L.times.length>1)resolveShaping(L,r,prev,L.P||P,sz);else pending={i,L,type:'shape'}}
-    else if(r&&pending){const q=pending;pending=null;if(q.type==='rep')resolveRep(q.L,r,prev,L.P||P,sz);else resolveShaping(q.L,r,prev,L.P||P,sz)}
-    else if(r&&prev)resolveResidual(L,r,prev,L.P||P,acc);
-    if(L.raw!==undefined&&!L.skip&&!L.frozen&&prev&&info.panelF[info.piece[i]]&&panelMentions(L.line)>=2&&!L.flag){
-      const d=pickI(prev.n,sz)-pickI(prev.o,sz);
-      if(d){const a=Math.abs(d),h=Math.floor(a/2),word=d>0?'extra':'fewer';
-        L.flag={note:true,text:`Gauge kept the cable panels as written and ${d>0?'widened':'narrowed'} this piece by ${a} stitch${a>1?'es':''}. Work ${h===a-h?`${h} ${word} plain stitch${h>1?'es':''} at each side edge`:`${h} ${word} plain stitch${h===1?'':'es'} at one side edge and ${a-h} at the other`}, outside the panels.`}}}
-    if(r){prev={o:r.o,n:r.n};acc=null}
-    L.after=prev});
-  expire();
+  /* pass 0: read the yoke from the printed numbers alone, to catch the pattern's own arithmetic slips */
+  const audit=trackYoke(parseAll(),sz,info,'audit',P);
+  const applyAudit=parsed=>{
+    for(const i in audit.fix){const L=parsed[i];if(!L||L.skip)continue;for(const off in audit.fix[i]){const x=L.raw.find(y=>y.off===+off);if(!x)continue;
+        const j=Math.min(sz,x.o.length-1);x.o=x.o.slice();x.o[j]=audit.fix[i][off];x.n=x.o.map(n=>convNum(n,x.k,L.P||P))}
+      if(audit.notes[i]&&!L.flag)L.flag={note:true,text:audit.notes[i]}}
+    for(const i in audit.per){if(parsed[i]&&!parsed[i].skip)parsed[i].per=audit.per[i]}
+    if(audit.part){const L=parsed[audit.part.i];if(L&&!L.skip){const co=parsed.slice(0,audit.part.i).reverse().find(x=>x.co&&pieceStart(x));
+      if(co){const nAll=audit.part.runs.map(()=>[]);const nsz=Math.max(...audit.part.runs.map(r=>r.src.match(/\d+/g).length),co.co.o.length);
+        for(let j=0;j<nsz;j++){const parts=audit.part.runs.map(r=>sizeVal(r.src,j));const tot=pickI(co.co.o,j);
+          const sc=parts.reduce((s,v)=>s+v,0)===tot?scaleParts(parts,pickI(co.co.n,j),P.keepEven):null;
+          audit.part.runs.forEach((r,k)=>nAll[k].push(sc?sc[k]:parts[k]))}
+        audit.part.runs.forEach((r,k)=>{const o=r.src.match(/\d+(?:\.\d+)?/g).map(Number);const n=o.length===1?[nAll[k][Math.min(sz,nAll[k].length-1)]]:o.map((v,j)=>nAll[k][j]);
+          L.raw.push({o,n,k:'part',src:r.src,off:r.off,len:r.src.length,ord:false,total:false,every:false,more:false})});
+        L.raw.sort((a,b)=>a.off-b.off)}}}};
+  const walk=(parsed,sep)=>{
+    let prev=null,pending=null,acc=null;
+    const addAcc=(L,upto)=>{L.raw.forEach(x=>{if(x.k!=='co'||(upto!=null&&x.off>upto))return;acc=acc||{o:[],n:[]};const n=Math.max(acc.o.length,x.o.length);
+      for(let i=0;i<n;i++){acc.o[i]=(acc.o[i]||0)+pickI(x.o,i);acc.n[i]=(acc.n[i]||0)+pickI(x.n,i)}})};
+    const expire=()=>{if(pending&&info.panelF[info.piece[pending.i]]){pending=null;return}
+      if(pending){pending.L.flag=pending.L.flag||{text:'This line’s numbers depend on a stitch count the app couldn’t find nearby. Check it by hand.'};pending=null}};
+    parsed.forEach((L,i)=>{
+      if(L.skip)return;
+      if(pending&&i-pending.i>2)expire();
+      const r=L.res;
+      const recentInc=parsed.slice(Math.max(0,i-3),i).some(x=>/\b(?:inc|dec|kfb|m1[lrp]?|k2tog|ssk|yo)\b/i.test(x.line));
+      L.times=(L.shapeSelf||(L.repRows&&recentInc))?L.timesAll:[];
+      if(pieceStart(L)){expire();prev={o:L.co.o,n:L.co.n};acc=null}
+      else addAcc(L,r?r.off:null);
+      if(sep&&i===sep.i&&r){expire();pending=null;
+        const j=Math.min(sz,r.n.length-1);r.n=r.o.map(n=>convNum(n,'st',L.P||P));r.n[j]=sep.sleeveN;
+        const b=L.raw.find(x=>x.k==='st'&&x.total&&x!==r);if(b){const jb=Math.min(sz,b.n.length-1);b.n=b.o.map(n=>convNum(n,'st',L.P||P));b.n[jb]=sep.bodyN}}
+      else if(L.rep){expire();resolveRep(L,r,prev,L.P||P,sz);if(!r&&prev&&!L.rep.times&&!/\bto\s+(?:\d+\s+sts?\s+before\s+)?(?:marker|m\b|bor\b|end\b|last\b)/i.test(L.rep.body)&&/\b(?:k2tog|ssk|p2tog|k3tog|sk2p|s2kp|cdd|m1|kfb|yo|dec|inc)/i.test(L.line))pending={i,L,type:'rep'}}
+      else if(L.times.length){expire();if(r||L.times.length>1)resolveShaping(L,r,prev,L.P||P,sz);else pending={i,L,type:'shape'}}
+      else if(r&&pending){const q=pending;pending=null;if(q.type==='rep')resolveRep(q.L,r,prev,L.P||P,sz);else resolveShaping(q.L,r,prev,L.P||P,sz)}
+      else if(r&&prev)resolveResidual(L,r,prev,L.P||P,acc);
+      if(L.raw!==undefined&&!L.skip&&!L.frozen&&prev&&info.panelF[info.piece[i]]&&panelMentions(L.line)>=2&&!L.flag){
+        const d=pickI(prev.n,sz)-pickI(prev.o,sz);
+        if(d){const a=Math.abs(d),h=Math.floor(a/2),word=d>0?'extra':'fewer';
+          L.flag={note:true,text:`Gauge kept the cable panels as written and ${d>0?'widened':'narrowed'} this piece by ${a} stitch${a>1?'es':''}. Work ${h===a-h?`${h} ${word} plain stitch${h>1?'es':''} at each side edge`:`${h} ${word} plain stitch${h===1?'':'es'} at one side edge and ${a-h} at the other`}, outside the panels.`}}}
+      if(r){prev={o:r.o,n:r.n};acc=null}
+      L.after=prev});
+    expire();return parsed};
+  let parsed=parseAll();applyAudit(parsed);walk(parsed,null);
+  /* pass 2: with the repeats settled, follow the sections for the new counts and rewrite the split */
+  const trk=trackYoke(parsed,sz,info,'full',P);
+  if(trk.sep&&trk.sep.sleeveN!=null){parsed=parseAll();applyAudit(parsed);walk(parsed,trk.sep);
+    const L=parsed[trk.sep.i];if(L){const S=trk.sep.sections;const idx=trk.sep.sleeveIdx;
+      const txt=`Counted from your markers: ${S.n.map((v,k)=>idx.includes(k)?v+' (sleeve)':v).join(' · ')} = ${S.n.reduce((s,v)=>s+v,0)} sts before the underarm cast-ons.`;
+      L.flag=L.flag?{note:L.flag.note,text:L.flag.text+' '+txt}:{note:true,text:txt}}}
   return parsed.map(L=>finalize(L,P))}
 function flagText(f){return f.text}
 /* stitches on the needle after line i, for the chosen size; null until the pattern has given a count */
@@ -612,7 +785,7 @@ function readout(p){
   const wd=w===0?'the right width':`<em>${Math.abs(w)}% ${w>0?'wider':'narrower'}</em>`;
   const hd=h===0?'the right length':`<em>${Math.abs(h)}% ${h>0?'longer':'shorter'}</em>`;
   return`Knit at the pattern's numbers, this yarn would come out ${wd} and ${hd}. Gauge rewrites the counts so it lands on the pattern's measurements.`}
-function stats(p,model){let n=0,f=0,w=0;convertAll(model,p).forEach(c=>{n+=c.changed;if(c.flag){f++;if(!w&&c.flag.w&&!c.flag.R)w=c.flag.w}});const m=Math.max(1,parseInt(p.mult)||1);let sug=w?m*w/gcd(m,w):0;if(sug===m||sug>24)sug=0;return{n,f,sug}}
+function stats(p,model){let n=0,f=0,notes=0,w=0;convertAll(model,p).forEach(c=>{n+=c.changed;if(c.flag){if(c.flag.note)notes++;else f++;if(!w&&c.flag.w&&!c.flag.R)w=c.flag.w}});const m=Math.max(1,parseInt(p.mult)||1);let sug=w?m*w/gcd(m,w):0;if(sug===m||sug>24)sug=0;return{n,f,notes,sug}}
 
 /* ---------- screens ---------- */
 function progressPct(p){const m=S.models[p.id];const total=m?m.lines.length:p.total||0;return total>1?Math.round(Math.min(1,(p.line||0)/(total-1))*100):0}
@@ -811,7 +984,7 @@ async function pageView(p,model,host){
   const box=document.createElement('div');box.className='pages'+(p.showOrig?' orig':'');box.id='pages';
   cache.pages.forEach(c=>box.appendChild(c.wrap));
   const st=stats(p,model);
-  if(st.f&&model.hasText){const b=document.createElement('p');b.className='banner';b.innerHTML=`<i></i><span>${st.f} line${st.f>1?'s':''} to check by hand. Text view explains each one.</span>`;host.appendChild(b)}
+  if((st.f||st.notes)&&model.hasText){const b=document.createElement('p');b.className='banner'+(st.f?'':' note');b.innerHTML=`<i></i><span>${st.f?`${st.f} line${st.f>1?'s':''} to check by hand.`:''}${st.notes?` ${st.notes} note${st.notes>1?'s':''} on the pattern’s own numbers.`:''} Text view explains.</span>`;host.appendChild(b)}
   const sheet=document.createElement('div');sheet.className='sheet';sheet.appendChild(box);host.appendChild(sheet);
   drawOverlays(p,model);
   const doc=S.docs[p.id];if(!doc)return;
@@ -831,7 +1004,7 @@ function drawOverlays(p,model){
     if(i===p.line){const tag=model.hasText?countTag(C,i,p):'';parts[l.page].push(`<div class="ruler" id="ruler" style="top:${((top-Y-l.h*0.2)*k).toFixed(1)}px;height:${((bot-top+l.h*0.4)*k).toFixed(1)}px">${tag?`<span class="rtag">${tag}</span>`:''}</div>`)}
     if(!model.hasText)return;
     const cv=C[i];
-    if(cv.flag)parts[l.page].push(`<span class="fl" style="top:${((l.y-Y-l.h*0.55)*k-4).toFixed(1)}px"></span>`);
+    if(cv.flag)parts[l.page].push(`<span class="fl${cv.flag.note?' note':''}" style="left:${Math.max(2,(l.x0-X)*k-11).toFixed(1)}px;top:${((l.y-Y-l.h*0.55)*k-4).toFixed(1)}px"></span>`);
     cv.segs.forEach(s=>{if(s.t!==undefined)return;
       const nums=[...s.src.matchAll(/\d+(?:\.\d+)?(?:st|nd|rd|th)?/gi)];if(!nums.length)return;
       const j=Math.min(p.size||0,nums.length-1),m=nums[j],v=s.n[Math.min(j,s.n.length-1)];
